@@ -1,0 +1,13 @@
+# Secrets — never commit credentials
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Vercel
+.vercel/

@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enphase COO Email Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4f8;--surface:#ffffff;--surface2:#f8fafc;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --primary:#f47920;--primary-dark:#d4620f;--primary-light:#fff4ed;
+  --text:#1e293b;--muted:#64748b;--subtle:#94a3b8;
+  --success:#16a34a;--success-bg:#f0fdf4;--success-border:#bbf7d0;
+  --focus-ring:rgba(244,121,32,0.25);
+  --radius:10px;--radius-sm:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;height:60px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.logo{display:flex;align-items:center;gap:.75rem}
+.logo-mark{width:34px;height:34px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.logo-mark svg{fill:#fff;width:20px;height:20px}
+.logo-text{font-size:1rem;font-weight:700;color:var(--text)}
+.logo-text span{color:var(--primary)}
+.header-link{font-size:.78rem;color:var(--muted);text-decoration:none;padding:.35rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .15s}
+.header-link:hover{border-color:var(--primary);color:var(--primary)}
+
+/* ── Layout ── */
+.page{max-width:1180px;margin:0 auto;padding:2rem;display:grid;grid-template-columns:320px 1fr;gap:1.75rem;align-items:start}
+
+/* ── Card ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.card-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1.1rem;display:flex;align-items:center;gap:.5rem}
+.card-title::before{content:'';display:block;width:3px;height:14px;background:var(--primary);border-radius:2px}
+
+/* ── Steps ── */
+.step-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:.4rem}
+.section-gap{margin-top:1.4rem}
+
+/* ── Form elements ── */
+.fg{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.9rem}
+label{font-size:.78rem;font-weight:500;color:var(--text)}
+label span{color:var(--subtle);font-weight:400}
+select,input,textarea{width:100%;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:.55rem .75rem;font-size:.85rem;font-family:inherit;color:var(--text);background:var(--surface);transition:border-color .15s,box-shadow .15s;outline:none}
+select:focus,input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
+textarea{resize:vertical;line-height:1.6}
+select{cursor:pointer}
+option:disabled{color:var(--subtle)}
+
+/* ── Region badge strip ── */
+.region-info{background:var(--primary-light);border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:.6rem .85rem;font-size:.78rem;color:#9a3412;display:none;margin-top:.35rem}
+.region-info strong{font-weight:600}
+
+/* ── Dynamic fields ── */
+#dynamic-fields .fg{margin-bottom:.85rem}
+.field-section{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:.9rem}
+.field-section-title{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.75rem}
+
+/* ── Generate button ── */
+.btn-primary{width:100%;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:.7rem 1.5rem;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s,transform .1s;margin-top:.5rem;font-family:inherit}
+.btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{background:var(--subtle);cursor:not-allowed;transform:none}
+
+/* ── Output panel ── */
+.output-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.output-header{padding:1.1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.output-header h2{font-size:.95rem;font-weight:600;color:var(--text)}
+.output-body{padding:1.5rem}
+
+/* ── To/Send row ── */
+.to-row{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:var(--muted)}
+.to-row strong{color:var(--text);font-weight:600}
+
+/* ── Subject / Body blocks ── */
+.output-block{margin-bottom:1.25rem}
+.output-block-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.45rem}
+.output-block-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.copy-btn{background:none;border:1px solid var(--border2);border-radius:5px;padding:.25rem .65rem;font-size:.72rem;font-weight:600;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:.3rem;transition:all .15s;font-family:inherit}
+.copy-btn:hover{border-color:var(--primary);color:var(--primary)}
+.copy-btn.copied{border-color:var(--success);color:var(--success);background:var(--success-bg)}
+.copy-btn svg{width:12px;height:12px;stroke:currentColor;fill:none}
+
+.subject-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.7rem 1rem;font-size:.88rem;font-weight:500;color:var(--text);font-family:'Inter',sans-serif;word-break:break-word}
+
+.body-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem 1.2rem;font-size:.85rem;color:var(--text);font-family:'Inter',sans-serif;white-space:pre-wrap;line-height:1.75;word-break:break-word;max-height:520px;overflow-y:auto}
+
+/* ── Empty state ── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3.5rem 2rem;color:var(--subtle);gap:.75rem;text-align:center}
+.empty-state svg{opacity:.35;width:52px;height:52px;stroke:currentColor;fill:none}
+.empty-state p{font-size:.88rem;max-width:280px;line-height:1.6}
+
+/* ── Scenario badge ── */
+.scenario-badge{display:inline-flex;align-items:center;gap:.4rem;background:var(--primary-light);border:1px solid #fed7aa;border-radius:5px;padding:.25rem .65rem;font-size:.72rem;font-weight:600;color:#9a3412;margin-bottom:1rem}
+
+/* responsive */
+@media(max-width:860px){.page{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    <span class="logo-text">Enphase <span>COO Tool</span></span>
+  </div>
+  <a href="/api-portal" class="header-link">API Portal →</a>
+</header>
+
+<div class="page">
+
+  <!-- LEFT: Controls -->
+  <div>
+    <div class="card">
+      <div class="card-title">Build Email</div>
+
+      <!-- Step 1: Region -->
+      <div class="step-label">Step 1 — Region</div>
+      <div class="fg">
+        <label>Support Region</label>
+        <select id="sel-region" onchange="onRegionChange()">
+          <option value="" disabled selected>Select a region…</option>
+          <option value="US">United States</option>
+          <option value="DE">Germany</option>
+          <option value="AT">Austria</option>
+          <option value="CH">Switzerland</option>
+          <option value="NL">Netherlands</option>
+          <option value="BE">Belgium</option>
+          <option value="FR">France</option>
+          <option value="LU">Luxembourg</option>
+          <option value="GB">United Kingdom</option>
+          <option value="ES">Spain</option>
+        </select>
+        <div id="region-info" class="region-info"></div>
+      </div>
+
+      <!-- Step 2: Scenario -->
+      <div class="section-gap">
+        <div class="step-label">Step 2 — Scenario</div>
+        <div class="fg">
+          <label>Email Template</label>
+          <select id="sel-scenario" onchange="onScenarioChange()">
+            <option value="" disabled selected>Select a scenario…</option>
+            <optgroup label="COO Completed">
+              <option value="coo_normal">COO Completed — System Normal</option>
+              <option value="coo_issue">COO Completed — System Has Issues</option>
+            </optgroup>
+            <optgroup label="Documents Required">
+              <option value="doc_name">Docs Needed — Name Mismatch</option>
+              <option value="doc_address">Docs Needed — Address Mismatch</option>
+              <option value="doc_name_address">Docs Needed — Name &amp; Address Mismatch</option>
+              <option value="doc_missing">Docs Needed — Not Attached</option>
+            </optgroup>
+            <optgroup label="Special Cases">
+              <option value="lease_denial">Lease Site — Customer Denial</option>
+              <option value="already_owner">Existing Owner / Already Owner</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      <!-- Step 3: Dynamic Fields -->
+      <div class="section-gap" id="fields-section" style="display:none">
+        <div class="step-label">Step 3 — Fill Details</div>
+        <div id="dynamic-fields"></div>
+        <button class="btn-primary" onclick="generateEmail()">Generate Email Draft</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Output -->
+  <div class="output-card" id="output-card">
+    <div class="output-header">
+      <h2>Email Draft</h2>
+      <span id="scenario-badge-header" style="display:none" class="scenario-badge">
+        <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        <span id="badge-text"></span>
+      </span>
+    </div>
+    <div class="output-body" id="output-body">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        <p>Select a region and scenario, fill in the details, then click <strong>Generate Email Draft</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Region data ───────────────────────────────────────────────────
+const REGIONS = {
+  US: { name:'United States',  phone:'(877) 797-4743' },
+  DE: { name:'Germany',        phone:'+49(0)8938037726' },
+  AT: { name:'Austria',        phone:'+43(0)720115456' },
+  CH: { name:'Switzerland',    phone:'+41(0)435880565' },
+  NL: { name:'Netherlands',    phone:'+31(0)852082305' },
+  BE: { name:'Belgium',        phone:'+32(0)78482728' },
+  FR: { name:'France',         phone:'+33(0)970731076' },
+  LU: { name:'Luxembourg',     phone:'80085850' },
+  GB: { name:'United Kingdom', phone:'+44(0)3308088522' },
+  ES: { name:'Spain',          phone:'+34518880277' },
+};
+
+// ── Scenario metadata ─────────────────────────────────────────────
+const SCENARIOS = {
+  coo_normal:       { label:'COO Completed — System Normal',        subject: true },
+  coo_issue:        { label:'COO Completed — System Has Issues',     subject: true },
+  doc_name:         { label:'Docs Needed — Name Mismatch',           subject: false },
+  doc_address:      { label:'Docs Needed — Address Mismatch',        subject: false },
+  doc_name_address: { label:'Docs Needed — Name & Address Mismatch', subject: false },
+  doc_missing:      { label:'Docs Needed — Not Attached',            subject: false },
+  lease_denial:     { label:'Lease Site — Customer Denial',          subject: false },
+  already_owner:    { label:'Existing Owner / Already Owner',        subject: false },
+};
+
+// ── Field definitions per scenario ───────────────────────────────
+const FIELDS = {
+  coo_normal: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'system_name',   label:'System Name',           ph:'e.g. Smith Solar' },
+    { label:'New Owner Details', type:'section' },
+    { id:'new_name',      label:'New Owner Name',        ph:'Full name' },
+    { id:'new_email',     label:'New Owner Email',       ph:'email@example.com' },
+    { id:'new_address',   label:'New Owner Address',     ph:'Street, City, State ZIP' },
+    { label:'Service Contacts', type:'section' },
+    { id:'maintainer_name',  label:'Maintainer Name',   ph:'Company or person name' },
+    { id:'maintainer_phone', label:'Maintainer Phone',  ph:'+1 555 000 0000' },
+    { id:'installer_name',   label:'Installer Name',    ph:'Company or person name' },
+    { id:'installer_phone',  label:'Installer Phone',   ph:'+1 555 000 0000' },
+  ],
+  coo_issue: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'system_name',   label:'System Name',           ph:'e.g. Smith Solar' },
+    { label:'New Owner Details', type:'section' },
+    { id:'new_name',      label:'New Owner Name',        ph:'Full name' },
+    { id:'new_email',     label:'New Owner Email',       ph:'email@example.com' },
+    { id:'new_address',   label:'New Owner Address',     ph:'Street, City, State ZIP' },
+    { label:'Issue & Contacts', type:'section' },
+    { id:'issue_desc',    label:'Issue Description',     ph:'e.g. communication error on 3 microinverters', type:'textarea' },
+    { id:'maintainer_name',  label:'Maintainer Name',   ph:'Company or person name' },
+    { id:'maintainer_phone', label:'Maintainer Phone',  ph:'+1 555 000 0000' },
+    { id:'installer_name',   label:'Installer Name',    ph:'Company or person name' },
+    { id:'installer_phone',  label:'Installer Phone',   ph:'+1 555 000 0000' },
+  ],
+  doc_name: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
+  ],
+  doc_address: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
+  ],
+  doc_name_address: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
+  ],
+  doc_missing: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
+  ],
+  lease_denial: [
+    { id:'customer_name',  label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',        label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',    label:'Case Number',           ph:'e.g. 00123456' },
+    { id:'lease_company',  label:'Lease Company Name',    ph:'e.g. SunRun, Tesla Energy' },
+    { id:'refund_amount',  label:'Refund Amount',         ph:'e.g. $150.00' },
+  ],
+  already_owner: [
+    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
+    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
+    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
+  ],
+};
+
+// ── Template builders ─────────────────────────────────────────────
+function v(id){ return (document.getElementById(id)||{}).value?.trim()||'['+id.replace(/_/g,' ').toUpperCase()+']'; }
+
+function getPhone(){
+  const r = document.getElementById('sel-region').value;
+  return r ? REGIONS[r].phone : '(877) 797-4743';
+}
+
+function docList(){
+  return `• Recent utility bill\n• Bank statement\n• Mortgage statement\n• Property tax receipt\n• Voter registration card\n• Insurance card\n• Driver's license`;
+}
+
+const TEMPLATES = {
+  coo_normal(){ const ph=getPhone(); return {
+    to:`New Owner — ${v('new_name')} <${v('new_email')}>`,
+    subject:`Enphase Update: Ownership Transfer (Site ID: ${v('site_id')})`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+This is regarding Site ID: ${v('site_id')} with the system name "${v('system_name')}". Ownership of the system has been successfully transferred to the new owner listed below. Please be assured that this transition was seamless and our commitment to uninterrupted, high quality service remains unchanged.
+
+New Owner Details:
+• Name: ${v('new_name')}
+• Email: ${v('new_email')}
+• Address: ${v('new_address')}
+
+You may update the system name via Menu > Account > My Information > System Name.
+
+You can access your system using:
+• Enphase App: https://enphase.com/en-in/homeowners/enphase-app
+• Enlighten Web Portal: https://enlighten.enphaseenergy.com/
+• How to Video: https://www.youtube.com/watch?v=ZAkoKI5rGvY
+
+A health scan performed today confirms that your system is fully operational. For future assistance, please contact your Maintainer (${v('maintainer_name')} at ${v('maintainer_phone')}), Installer (${v('installer_name')} at ${v('installer_phone')}), or Enphase Support at ${ph}.
+
+Thank you for choosing Enphase.
+
+Warm regards,
+Enphase Support Team`}},
+
+  coo_issue(){ const ph=getPhone(); return {
+    to:`New Owner — ${v('new_name')} <${v('new_email')}>`,
+    subject:`Enphase Update: Ownership Transfer (Site ID: ${v('site_id')})`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+This is regarding Site ID: ${v('site_id')}, with the system name "${v('system_name')}." The ownership of your system has been successfully transferred to the new owner listed below. Please be assured that this transition was completed smoothly, and our commitment to uninterrupted, high quality service remains unchanged.
+
+New Owner Details:
+• Name: ${v('new_name')}
+• Email: ${v('new_email')}
+• Address: ${v('new_address')}
+
+You may update the system name via Menu > Account > My Information > System Name.
+
+You can access your system using:
+• Enphase App: https://enphase.com/en-in/homeowners/enphase-app
+• Enlighten Web Portal: https://enlighten.enphaseenergy.com/
+• How to Video: https://www.youtube.com/watch?v=ZAkoKI5rGvY
+
+During the ownership update, a health scan indicated that the system requires troubleshooting for the ${v('issue_desc')} issue. Please contact your Maintainer (${v('maintainer_name')} at ${v('maintainer_phone')}) or Installer (${v('installer_name')} at ${v('installer_phone')}). Alternatively, you may reach Enphase Support at ${ph} for assistance.
+
+If you have any further questions, please visit https://enphase.com/support.
+
+Warm regards,
+Enphase Support Team`}},
+
+  doc_name(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the name provided in the request and the supporting ownership document.
+
+To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
+
+Please provide one of the following documents for verification:
+${docList()}
+
+Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
+
+Warm regards,
+Enphase Support Team`}},
+
+  doc_address(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the Address provided in the request and the supporting ownership document.
+
+To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
+
+Please provide one of the following documents for verification:
+${docList()}
+
+Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
+
+Warm regards,
+Enphase Support Team`}},
+
+  doc_name_address(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the Name along with Address provided in the request and the supporting ownership document.
+
+To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
+
+Please provide one of the following documents for verification:
+${docList()}
+
+Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
+
+Warm regards,
+Enphase Support Team`}},
+
+  doc_missing(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} as well as Case Number: ${v('case_number')}. To proceed, please provide a valid document that matches your name and the system address.
+
+Please provide one of the following documents for verification:
+${docList()}
+
+Kindly reply to this email with the updated document. Please feel free to contact us if you need any further assistance.
+
+Warm regards,
+Enphase Support Team`}},
+
+  lease_denial(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Our records indicate that the system is currently under lease with ${v('lease_company')}.
+
+If the system is still under an active lease, please contact your lease owner for any further changes to the site. Based on your confirmation, we will initiate a refund of ${v('refund_amount')} within 5–7 business days.
+
+If the lease has been fully paid off, kindly share the lease completion or lease termination document so that we may proceed with the ownership update. Based on your response to this email, we will take further action on your request.
+
+Please reply to this email with the requested information. Let us know if you need any further assistance.
+
+Warm regards,
+Enphase Support Team`}},
+
+  already_owner(){ return {
+    to:`Requestor / Customer — ${v('customer_name')}`,
+    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
+    body:`Dear ${v('customer_name')},
+
+Thank you for contacting Enphase.
+
+We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. As per our records, you are already the owner of this system. Therefore, there is no need to proceed with an ownership transfer.
+
+We will initiate a refund for the amount paid for the transfer request, which should be credited to your account within 5–7 business days.
+
+If you have any further questions, please reply to this email or visit https://enphase.com/support.
+
+Warm regards,
+Enphase Support Team`}},
+};
+
+// ── UI logic ──────────────────────────────────────────────────────
+function onRegionChange(){
+  const r = document.getElementById('sel-region').value;
+  const info = document.getElementById('region-info');
+  if(r && REGIONS[r]){
+    info.style.display='block';
+    info.innerHTML=`<strong>${REGIONS[r].name}</strong> — Support: ${REGIONS[r].phone}`;
+  } else {
+    info.style.display='none';
+  }
+}
+
+function onScenarioChange(){
+  const sc = document.getElementById('sel-scenario').value;
+  if(!sc) return;
+  const fields = FIELDS[sc] || [];
+  const container = document.getElementById('dynamic-fields');
+  let html='';
+  let inSection=false;
+  fields.forEach(f=>{
+    if(f.type==='section'){
+      if(inSection) html+='</div>';
+      html+=`<div class="field-section"><div class="field-section-title">${f.label}</div>`;
+      inSection=true;
+    } else if(f.type==='textarea'){
+      html+=`<div class="fg"><label for="${f.id}">${f.label}</label><textarea id="${f.id}" rows="2" placeholder="${f.ph}"></textarea></div>`;
+    } else {
+      html+=`<div class="fg"><label for="${f.id}">${f.label}</label><input id="${f.id}" placeholder="${f.ph}"></div>`;
+    }
+  });
+  if(inSection) html+='</div>';
+  container.innerHTML=html;
+  document.getElementById('fields-section').style.display='block';
+  // reset output
+  document.getElementById('output-body').innerHTML=`<div class="empty-state"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg><p>Fill in the fields above and click <strong>Generate Email Draft</strong>.</p></div>`;
+  document.getElementById('scenario-badge-header').style.display='none';
+}
+
+// Module-level storage — avoids embedding JSON inside HTML attributes
+let _currentSubject = '';
+let _currentBody    = '';
+
+function copySubject(){ copyText(_currentSubject, 'copy-subject'); }
+function copyBody(){    copyText(_currentBody,    'copy-body'); }
+
+function escHtml(str){
+  return str
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function copyText(text, btnId){
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById(btnId);
+    btn.classList.add('copied');
+    btn.innerHTML=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg> Copied!`;
+    setTimeout(()=>{
+      btn.classList.remove('copied');
+      btn.innerHTML=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
+    },2200);
+  });
+}
+
+function generateEmail(){
+  const sc = document.getElementById('sel-scenario').value;
+  const region = document.getElementById('sel-region').value;
+  if(!sc){ alert('Please select a scenario first.'); return; }
+  if(!region){ alert('Please select a region first.'); return; }
+
+  const result = TEMPLATES[sc]();
+  const scLabel = SCENARIOS[sc].label;
+
+  // Store in module vars — onclick handlers reference these, no JSON in attributes
+  _currentSubject = result.subject;
+  _currentBody    = result.body;
+
+  const copyIcon=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
+
+  document.getElementById('output-body').innerHTML=`
+    <div class="to-row"><strong>Send To:</strong> &nbsp;${escHtml(result.to)}</div>
+
+    <div class="output-block">
+      <div class="output-block-header">
+        <span class="output-block-label">Subject</span>
+        <button class="copy-btn" id="copy-subject" onclick="copySubject()">${copyIcon}</button>
+      </div>
+      <div class="subject-box">${escHtml(result.subject)}</div>
+    </div>
+
+    <div class="output-block">
+      <div class="output-block-header">
+        <span class="output-block-label">Email Body</span>
+        <button class="copy-btn" id="copy-body" onclick="copyBody()">${copyIcon}</button>
+      </div>
+      <div class="body-box">${escHtml(result.body)}</div>
+    </div>
+  `;
+
+  const badge = document.getElementById('scenario-badge-header');
+  badge.style.display='inline-flex';
+  document.getElementById('badge-text').textContent=scLabel;
+}
+</script>
+</body>
+</html>

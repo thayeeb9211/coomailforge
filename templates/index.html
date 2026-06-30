@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enphase Data Scraper</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --card: rgba(22,28,45,0.5);
+            --border: rgba(255,255,255,0.08);
+            --primary: #00d2ff;
+            --primary-glow: rgba(0,210,255,0.35);
+            --success: #00e676;
+            --warn: #ffb300;
+            --error: #ff1744;
+            --text: #f3f4f6;
+            --muted: #9ca3af;
+            --console: #020305;
+        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Outfit',sans-serif;background:radial-gradient(circle at 50% 30%,#151c30 0%,var(--bg) 70%);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+        header{padding:1.2rem 2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:rgba(11,15,25,0.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:100}
+        header h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#00d2ff,#00e676);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+        .badge{padding:.3rem .8rem;border-radius:9999px;font-size:.8rem;font-weight:600;display:flex;align-items:center;gap:.4rem;border:1px solid}
+        .badge.ok{background:rgba(0,230,118,.1);border-color:var(--success);color:var(--success)}
+        .badge.no{background:rgba(255,23,68,.1);border-color:var(--error);color:var(--error)}
+        .dot{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+
+        .layout{display:grid;grid-template-columns:340px 1fr;gap:1.5rem;padding:1.5rem 2rem;max-width:1500px;margin:0 auto;width:100%}
+        .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.4rem;backdrop-filter:blur(16px);box-shadow:0 8px 32px rgba(0,0,0,.4)}
+        .card-title{font-size:1rem;font-weight:700;margin-bottom:1.1rem;padding-left:.75rem;border-left:3px solid var(--primary)}
+
+        .form-group{display:flex;flex-direction:column;gap:.4rem;margin-bottom:1rem}
+        label{font-size:.8rem;color:var(--muted);font-weight:500}
+        input,select{background:rgba(11,15,25,.7);border:1px solid var(--border);border-radius:8px;padding:.65rem .75rem;color:#fff;font-family:inherit;font-size:.88rem;transition:border-color .2s,box-shadow .2s;width:100%}
+        input:focus,select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 8px var(--primary-glow)}
+        select option{background:#1a2035}
+
+        button{background:linear-gradient(135deg,#00d2ff,#009ac7);border:none;border-radius:8px;padding:.65rem 1.25rem;color:#0b0f19;font-weight:700;font-size:.88rem;cursor:pointer;transition:transform .15s,box-shadow .15s;display:inline-flex;align-items:center;gap:.4rem;white-space:nowrap}
+        button:hover{transform:translateY(-1px);box-shadow:0 4px 14px var(--primary-glow)}
+        button.sec{background:rgba(255,255,255,.07);color:#fff;border:1px solid var(--border)}
+        button.sec:hover{background:rgba(255,255,255,.13);box-shadow:none}
+        button.danger{background:linear-gradient(135deg,#ff4444,#cc0000);color:#fff}
+
+        .alert{padding:.65rem 1rem;border-radius:8px;font-size:.82rem;margin-bottom:1rem;border:1px solid transparent}
+        .alert.ok{background:rgba(0,230,118,.1);color:var(--success);border-color:rgba(0,230,118,.25)}
+        .alert.warn{background:rgba(255,179,0,.1);color:var(--warn);border-color:rgba(255,179,0,.25)}
+        .alert.err{background:rgba(255,23,68,.1);color:var(--error);border-color:rgba(255,23,68,.25)}
+
+        /* right panel */
+        .right{display:flex;flex-direction:column;gap:1.25rem}
+
+        /* tabs */
+        .tabs{display:flex;gap:.4rem;flex-wrap:wrap}
+        .tab{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:8px;padding:.45rem .9rem;font-size:.8rem;font-weight:600;cursor:pointer;color:var(--muted);transition:all .2s}
+        .tab:hover{color:var(--text);background:rgba(255,255,255,.1)}
+        .tab.active{background:rgba(0,210,255,.15);border-color:var(--primary);color:var(--primary)}
+
+        /* query row */
+        .query-row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+        .query-row input{flex:1;min-width:160px}
+
+        /* json output */
+        .json-box{background:var(--console);border:1px solid var(--border);border-radius:12px;padding:1.25rem 1.5rem;font-family:'JetBrains Mono',monospace;font-size:.82rem;overflow:auto;max-height:62vh;box-shadow:inset 0 2px 10px rgba(0,0,0,.8);white-space:pre-wrap;line-height:1.6}
+        .json-key{color:#79c0ff}
+        .json-str{color:#a5d6a7}
+        .json-num{color:#ffb300}
+        .json-bool{color:#f48fb1}
+        .json-null{color:var(--muted)}
+
+        /* systems table */
+        .sys-table{width:100%;border-collapse:collapse;font-size:.84rem}
+        .sys-table th{text-align:left;padding:.5rem .75rem;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);font-size:.76rem;text-transform:uppercase;letter-spacing:.05em}
+        .sys-table td{padding:.55rem .75rem;border-bottom:1px solid rgba(255,255,255,.04)}
+        .sys-table tr:hover td{background:rgba(255,255,255,.03)}
+        .sys-table .id-link{color:var(--primary);cursor:pointer;font-family:'JetBrains Mono',monospace;text-decoration:underline dotted}
+
+        .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:220px;color:var(--muted);gap:.75rem;font-size:.9rem}
+        .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body>
+<header>
+    <h1>Enphase Data Scraper</h1>
+    <div id="status-badge" class="badge no">
+        <span class="dot"></span>
+        <span id="status-text">Not Authorized</span>
+    </div>
+</header>
+
+<div class="layout">
+    <!-- LEFT: Credentials -->
+    <div style="display:flex;flex-direction:column;gap:1.25rem">
+        <div class="card">
+            <div class="card-title">API Credentials</div>
+            <div id="alert-box" style="display:none"></div>
+            <form id="cfg-form">
+                <div class="form-group">
+                    <label>Client ID</label>
+                    <input id="client_id" placeholder="e71b237c…">
+                </div>
+                <div class="form-group">
+                    <label>Client Secret</label>
+                    <input type="password" id="client_secret" placeholder="••••••••">
+                </div>
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input id="api_key" placeholder="Developer API Key">
+                </div>
+                <div class="form-group">
+                    <label>Redirect URI</label>
+                    <input id="redirect_uri" value="http://localhost:5000/api/enphase/callback">
+                </div>
+                <button type="submit" class="sec" style="width:100%">Save Credentials</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card-title">OAuth Authorization</div>
+            <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;line-height:1.6">
+                Click below to open the Enphase login. After approving, you will be redirected back and authorized automatically.
+            </p>
+            <button id="auth-btn" style="width:100%">&#x1F510; Authorize with Enphase</button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Quick Info</div>
+            <div style="font-size:.78rem;color:var(--muted);line-height:1.8">
+                <div><strong style="color:var(--text)">Base URL</strong><br>api.enphaseenergy.com</div>
+                <div style="margin-top:.75rem"><strong style="color:var(--text)">Auth</strong><br>OAuth 2.0 Bearer + key param</div>
+                <div style="margin-top:.75rem"><strong style="color:var(--text)">Employee note</strong><br>If you see "no systems", query by System ID directly on the Details tab.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Data panels -->
+    <div class="right">
+        <!-- Tab bar -->
+        <div class="card" style="padding:1rem">
+            <div class="tabs">
+                <div class="tab active" data-tab="systems">All Systems</div>
+                <div class="tab" data-tab="details">System Details</div>
+                <div class="tab" data-tab="summary">Summary</div>
+                <div class="tab" data-tab="devices">Devices</div>
+                <div class="tab" data-tab="energy">Energy Lifetime</div>
+                <div class="tab" data-tab="production">Production Telemetry</div>
+                <div class="tab" data-tab="consumption">Consumption Telemetry</div>
+                <div class="tab" data-tab="inverters">Inverters</div>
+            </div>
+        </div>
+
+        <!-- Systems List Tab -->
+        <div id="tab-systems" class="card tab-panel">
+            <div class="card-title">All Accessible Systems &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems</span></div>
+            <div style="display:flex;gap:.75rem;margin-bottom:1rem">
+                <button id="list-systems-btn">&#x1F504; Fetch Systems List</button>
+            </div>
+            <div id="systems-list-output">
+                <div class="empty">
+                    <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    <span>Click "Fetch Systems List" to load all accessible systems.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details Tab -->
+        <div id="tab-details" class="card tab-panel" style="display:none">
+            <div class="card-title">System Details &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-details" placeholder="System ID  e.g. 2564252">
+                <button id="btn-details">Query</button>
+            </div>
+            <pre id="out-details" class="json-box"><div class="empty"><span>Enter a System ID and click Query.</span></div></pre>
+        </div>
+
+        <!-- Summary Tab -->
+        <div id="tab-summary" class="card tab-panel" style="display:none">
+            <div class="card-title">System Summary &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/summary</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-summary" placeholder="System ID">
+                <button id="btn-summary">Query</button>
+            </div>
+            <pre id="out-summary" class="json-box"><div class="empty"><span>Lifetime energy &amp; current power output.</span></div></pre>
+        </div>
+
+        <!-- Devices Tab -->
+        <div id="tab-devices" class="card tab-panel" style="display:none">
+            <div class="card-title">Devices / Microinverters &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/devices</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-devices" placeholder="System ID">
+                <button id="btn-devices">Query</button>
+            </div>
+            <pre id="out-devices" class="json-box"><div class="empty"><span>Microinverter serial numbers and device info.</span></div></pre>
+        </div>
+
+        <!-- Energy Lifetime Tab -->
+        <div id="tab-energy" class="card tab-panel" style="display:none">
+            <div class="card-title">Energy Lifetime &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/energy_lifetime</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-energy" placeholder="System ID">
+                <button id="btn-energy">Query</button>
+            </div>
+            <pre id="out-energy" class="json-box"><div class="empty"><span>Daily production history since system install.</span></div></pre>
+        </div>
+
+        <!-- Production Telemetry Tab -->
+        <div id="tab-production" class="card tab-panel" style="display:none">
+            <div class="card-title">Production Telemetry &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/telemetry/production_micro</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-production" placeholder="System ID">
+                <select id="gran-production" style="width:140px">
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                </select>
+                <button id="btn-production">Query</button>
+            </div>
+            <pre id="out-production" class="json-box"><div class="empty"><span>Solar production telemetry per granularity.</span></div></pre>
+        </div>
+
+        <!-- Consumption Telemetry Tab -->
+        <div id="tab-consumption" class="card tab-panel" style="display:none">
+            <div class="card-title">Consumption Telemetry &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/telemetry/consumption_micro</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-consumption" placeholder="System ID">
+                <select id="gran-consumption" style="width:140px">
+                    <option value="day">Day</option>
+                    <option value="week">Week</option>
+                    <option value="month">Month</option>
+                </select>
+                <button id="btn-consumption">Query</button>
+            </div>
+            <pre id="out-consumption" class="json-box"><div class="empty"><span>Site consumption telemetry (requires consumption meter).</span></div></pre>
+        </div>
+
+        <!-- Inverters Summary Tab -->
+        <div id="tab-inverters" class="card tab-panel" style="display:none">
+            <div class="card-title">Inverters Summary &nbsp;<span style="color:var(--muted);font-size:.8rem;font-weight:400">GET /api/v4/systems/{id}/inverters_summary_by_envoy_or_site</span></div>
+            <div class="query-row" style="margin-bottom:1rem">
+                <input id="sid-inverters" placeholder="System ID">
+                <button id="btn-inverters">Query</button>
+            </div>
+            <pre id="out-inverters" class="json-box"><div class="empty"><span>Per-inverter performance summary grouped by Envoy.</span></div></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────
+function showAlert(msg, type='ok') {
+    const b = document.getElementById('alert-box');
+    b.style.display = 'block';
+    b.className = `alert ${type}`;
+    b.textContent = msg;
+    setTimeout(() => { b.style.display='none'; }, 6000);
+}
+
+function syntaxHighlight(obj) {
+    const s = JSON.stringify(obj, null, 2);
+    return s.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, m => {
+        let cls = 'json-num';
+        if (/^"/.test(m)) { cls = /:$/.test(m) ? 'json-key' : 'json-str'; }
+        else if (/true|false/.test(m)) { cls = 'json-bool'; }
+        else if (/null/.test(m)) { cls = 'json-null'; }
+        return `<span class="${cls}">${m}</span>`;
+    });
+}
+
+function setOutput(el, data, isError=false) {
+    if (isError) {
+        el.innerHTML = `<span style="color:var(--error)">&#x26A0; ${data.message}</span>\n\n${data.details ? syntaxHighlight(data.details) : ''}`;
+    } else {
+        el.innerHTML = syntaxHighlight(data);
+    }
+}
+
+function loading(el) {
+    el.innerHTML = '<div class="empty"><div class="spinner"></div><span>Querying Enphase Cloud API…</span></div>';
+}
+
+async function callApi(url, outEl) {
+    loading(outEl);
+    try {
+        const r = await fetch(url);
+        const d = await r.json();
+        if (d.status === 'success') setOutput(outEl, d.data);
+        else setOutput(outEl, d, true);
+    } catch(e) {
+        outEl.innerHTML = `<span style="color:var(--error)">Network error: ${e.message}</span>`;
+    }
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(x => x.style.display = 'none');
+        t.classList.add('active');
+        document.getElementById(`tab-${t.dataset.tab}`).style.display = '';
+    });
+});
+
+// ── Config load ───────────────────────────────────────────────────
+async function loadConfig() {
+    const r = await fetch('/api/config');
+    const d = await r.json();
+    document.getElementById('client_id').value = d.client_id || '';
+    document.getElementById('client_secret').value = d.client_secret || '';
+    document.getElementById('api_key').value = d.api_key || '';
+    document.getElementById('redirect_uri').value = d.redirect_uri || 'http://localhost:5000/api/enphase/callback';
+    const badge = document.getElementById('status-badge');
+    const txt = document.getElementById('status-text');
+    if (d.has_tokens) {
+        badge.className = 'badge ok'; txt.textContent = 'OAuth Authorized';
+    } else {
+        badge.className = 'badge no'; txt.textContent = 'Not Authorized';
+    }
+}
+
+document.getElementById('cfg-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const p = {
+        client_id: document.getElementById('client_id').value,
+        client_secret: document.getElementById('client_secret').value,
+        api_key: document.getElementById('api_key').value,
+        redirect_uri: document.getElementById('redirect_uri').value
+    };
+    const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) });
+    if (r.ok) { showAlert('Credentials saved.', 'ok'); loadConfig(); }
+    else showAlert('Failed to save.', 'err');
+});
+
+document.getElementById('auth-btn').addEventListener('click', async () => {
+    const r = await fetch('/api/enphase/auth-url');
+    const d = await r.json();
+    if (d.status === 'success') window.location.href = d.url;
+    else showAlert(d.message || 'Auth URL error.', 'err');
+});
+
+// ── Systems List ──────────────────────────────────────────────────
+document.getElementById('list-systems-btn').addEventListener('click', async () => {
+    const out = document.getElementById('systems-list-output');
+    out.innerHTML = '<div class="empty"><div class="spinner"></div><span>Fetching systems list…</span></div>';
+    try {
+        const r = await fetch('/api/enphase/systems');
+        const d = await r.json();
+        if (d.status !== 'success') {
+            out.innerHTML = `<div class="alert err">&#x26A0; ${d.message}<br><small>${d.details || ''}</small></div>`;
+            return;
+        }
+        const systems = d.data.systems || d.data || [];
+        if (!Array.isArray(systems) || systems.length === 0) {
+            out.innerHTML = `<div class="alert warn">No systems found for this account. Use the "System Details" tab to query by ID directly.</div>`;
+            return;
+        }
+        let html = `<table class="sys-table"><thead><tr>
+            <th>System ID</th><th>Name</th><th>Status</th><th>City</th><th>State</th><th>Timezone</th></tr></thead><tbody>`;
+        systems.forEach(s => {
+            html += `<tr>
+                <td><span class="id-link" onclick="loadSystemId('${s.system_id}')">${s.system_id}</span></td>
+                <td>${s.name || '—'}</td>
+                <td>${s.status || '—'}</td>
+                <td>${s.city || '—'}</td>
+                <td>${s.state || '—'}</td>
+                <td>${s.timezone || '—'}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+        out.innerHTML = html;
+    } catch(e) {
+        out.innerHTML = `<div class="alert err">Network error: ${e.message}</div>`;
+    }
+});
+
+function loadSystemId(sid) {
+    // Switch to details tab and pre-fill the system ID
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(x => x.style.display = 'none');
+    document.querySelector('[data-tab="details"]').classList.add('active');
+    document.getElementById('tab-details').style.display = '';
+    document.getElementById('sid-details').value = sid;
+}
+
+// ── Per-tab query buttons ─────────────────────────────────────────
+const tabActions = [
+    { btn:'btn-details',     sid:'sid-details',     out:'out-details',     url: id => `/api/enphase/system-data?system_id=${id}` },
+    { btn:'btn-summary',     sid:'sid-summary',     out:'out-summary',     url: id => `/api/enphase/system-summary?system_id=${id}` },
+    { btn:'btn-devices',     sid:'sid-devices',     out:'out-devices',     url: id => `/api/enphase/system-devices?system_id=${id}` },
+    { btn:'btn-energy',      sid:'sid-energy',      out:'out-energy',      url: id => `/api/enphase/energy-lifetime?system_id=${id}` },
+    { btn:'btn-production',  sid:'sid-production',  out:'out-production',  url: id => `/api/enphase/production-telemetry?system_id=${id}&granularity=${document.getElementById('gran-production').value}` },
+    { btn:'btn-consumption', sid:'sid-consumption', out:'out-consumption', url: id => `/api/enphase/consumption-telemetry?system_id=${id}&granularity=${document.getElementById('gran-consumption').value}` },
+    { btn:'btn-inverters',   sid:'sid-inverters',   out:'out-inverters',   url: id => `/api/enphase/inverters-summary?system_id=${id}` },
+];
+tabActions.forEach(({ btn, sid, out, url }) => {
+    document.getElementById(btn).addEventListener('click', () => {
+        const id = document.getElementById(sid).value.trim();
+        if (!id) { alert('Enter a System ID.'); return; }
+        callApi(url(id), document.getElementById(out));
+    });
+});
+
+// ── Init ──────────────────────────────────────────────────────────
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('auth') === 'success') showAlert('OAuth authorized successfully!', 'ok');
+window.onload = loadConfig;
+</script>
+</body>
+</html>
