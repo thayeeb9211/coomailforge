@@ -30,13 +30,13 @@ def init(sqlite_db_path):
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
             _db = _fs.client()
-            print("[db_layer] ☁️  Firebase Firestore")
+            print("[db_layer] Firebase Firestore (cloud mode)")
             return
         except Exception as e:
             print(f"[db_layer] Firebase init failed, falling back to SQLite: {e}")
             _db = None
     _init_sqlite()
-    print("[db_layer] 🗄️  SQLite")
+    print("[db_layer] SQLite (local mode)")
 
 
 def is_cloud():
