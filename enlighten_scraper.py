@@ -191,7 +191,7 @@ def fetch_site(site_id):
                           sfdc_details, standing_alarms — all at once.
     Stage 3 (parallel):   installer + maintainer company pages — if IDs found.
 
-    Reduces ~8 sequential round-trips to 3 staged bursts.
+    A shared httpx.Client reuses the TCP/TLS connection across all requests.
     """
     t0 = time.time()
 
@@ -202,141 +202,168 @@ def fetch_site(site_id):
     cookie_dict = _as_dict(cookies)
     base = f"{ENLIGHTEN_BASE}/admin/sites/{site_id}"
 
-    # ── Stage 1: main page (must be first — session validation + CSRF) ──────
+    # Shared client — one TLS handshake, connection pool reused across threads
+    client = httpx.Client(
+        cookies=cookie_dict,
+        headers=_HEADERS,
+        follow_redirects=True,
+        timeout=12,
+    )
+
+    def _timed_get(label, url, extra_headers=None):
+        """GET with per-request timing printed to server console."""
+        t = time.time()
+        try:
+            hdrs = {**_HEADERS, **(extra_headers or {})}
+            r = client.get(url, headers=hdrs)
+            elapsed = time.time() - t
+            print(f"[scraper]   {label:<22} {elapsed:.1f}s  HTTP {r.status_code}")
+            return r.text if r.status_code == 200 else ""
+        except Exception as exc:
+            elapsed = time.time() - t
+            print(f"[scraper]   {label:<22} {elapsed:.1f}s  ERROR: {exc}")
+            return ""
+
     try:
-        r_main = httpx.get(base, cookies=cookie_dict, headers=_HEADERS,
-                           follow_redirects=True, timeout=12)
-    except httpx.TimeoutException:
-        raise ValueError("Request timed out. Check your VPN/connection.")
-
-    if "login" in str(r_main.url) or r_main.status_code in (401, 403):
-        raise ValueError("Session expired. Please log in again.")
-    if r_main.status_code == 404:
-        raise ValueError(f"Site {site_id} not found or no access.")
-    if r_main.status_code != 200:
-        raise ValueError(f"HTTP {r_main.status_code} fetching site {site_id}.")
-
-    main_soup = BeautifulSoup(r_main.text, "html.parser")
-    csrf_el   = main_soup.find("meta", {"name": "csrf-token"})
-    csrf_tok  = csrf_el["content"] if csrf_el else ""
-    h1        = main_soup.find("h1")
-
-    ajax_headers = {
-        **_HEADERS,
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept":           "text/html, */*; q=0.01",
-        "Referer":          base,
-    }
-    if csrf_tok:
-        ajax_headers["X-CSRF-Token"] = csrf_tok
-
-    data = {
-        "site_id":               str(site_id),
-        "system_name":           h1.get_text(strip=True) if h1 else f"Site {site_id}",
-        "address":               "",
-        "installer_name":        "",
-        "installer_phone":       "",
-        "installer_email":       "",
-        "installer_website":     "",
-        "installer_company_id":  "",
-        "maintainer_name":       "",
-        "maintainer_phone":      "",
-        "maintainer_email":      "",
-        "maintainer_company_id": "",
-        "company_support_phone": "",
-        "company_support_email": "",
-        "company_website":       "",
-        "pv_type":               "",
-        "device_types":          "",
-        "stage":                 "",
-        "system_date":           "",
-        "local_time":            "",
-        "gateway_status":        "",
-        "has_issues":            False,
-        "alarm_count":           0,
-        "alarms":                [],
-    }
-
-    def _ajax_get(endpoint, timeout=8):
+        # ── Stage 1: main page (session check + CSRF) ────────────────────────
+        print(f"[scraper] ── Site {site_id} ──────────────────────────────")
+        t1 = time.time()
         try:
-            r = httpx.get(f"{base}/{endpoint}", cookies=cookie_dict,
-                          headers=ajax_headers, follow_redirects=True, timeout=timeout)
-            return r.text if r.status_code == 200 else ""
-        except Exception:
-            return ""
+            r_main = client.get(base)
+        except httpx.TimeoutException:
+            raise ValueError("Request timed out. Check your VPN/connection.")
+        print(f"[scraper]   {'main page':<22} {time.time()-t1:.1f}s  HTTP {r_main.status_code}")
 
-    def _page_get(path, timeout=8):
-        try:
-            r = httpx.get(f"{ENLIGHTEN_BASE}{path}", cookies=cookie_dict,
-                          headers=_HEADERS, follow_redirects=True, timeout=timeout)
-            return r.text if r.status_code == 200 else ""
-        except Exception:
-            return ""
+        if "login" in str(r_main.url) or r_main.status_code in (401, 403):
+            raise ValueError("Session expired. Please log in again.")
+        if r_main.status_code == 404:
+            raise ValueError(f"Site {site_id} not found or no access.")
+        if r_main.status_code != 200:
+            raise ValueError(f"HTTP {r_main.status_code} fetching site {site_id}.")
 
-    # ── Stage 2: fire all sub-endpoints simultaneously ───────────────────────
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-        f_addr   = pool.submit(_ajax_get, "address_details")
-        f_acc_aj = pool.submit(_ajax_get, "access_details")
-        f_acc_pg = pool.submit(_page_get, f"/admin/sites/{site_id}/access")
-        f_sfdc   = pool.submit(_ajax_get, "sfdc_details")
-        f_alarms = pool.submit(_ajax_get, "standing_alarms")
+        main_soup = BeautifulSoup(r_main.text, "html.parser")
+        csrf_el   = main_soup.find("meta", {"name": "csrf-token"})
+        csrf_tok  = csrf_el["content"] if csrf_el else ""
+        h1        = main_soup.find("h1")
 
-        addr_html     = f_addr.result()
-        acc_ajax_html = f_acc_aj.result()
-        acc_page_html = f_acc_pg.result()
-        sfdc_html     = f_sfdc.result()
-        alarms_text   = f_alarms.result()
+        ajax_hdrs = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept":           "text/html, */*; q=0.01",
+            "Referer":          base,
+        }
+        if csrf_tok:
+            ajax_hdrs["X-CSRF-Token"] = csrf_tok
 
-    # Parse stage-2 results
-    if addr_html:
-        data.update({k: v for k, v in _parse_address_details(addr_html).items() if v})
-    if acc_ajax_html:
-        data.update({k: v for k, v in _parse_access_details(acc_ajax_html).items() if v})
-    if acc_page_html:
-        for k, v in _parse_access_page(acc_page_html).items():
-            if v:
-                data[k] = v
-    if sfdc_html:
-        data.update({k: v for k, v in _parse_sfdc_status(sfdc_html).items()
-                     if v or k == "has_issues"})
-    if alarms_text and alarms_text.strip():
-        al = _parse_standing_alarms_csv(alarms_text)
-        data["alarms"]      = al.get("alarms", [])
-        data["alarm_count"] = al.get("alarm_count", 0)
-        if al.get("alarm_count", 0) > 0:
-            data["has_issues"] = True
+        data = {
+            "site_id":               str(site_id),
+            "system_name":           h1.get_text(strip=True) if h1 else f"Site {site_id}",
+            "address":               "",
+            "installer_name":        "",
+            "installer_phone":       "",
+            "installer_email":       "",
+            "installer_website":     "",
+            "installer_company_id":  "",
+            "maintainer_name":       "",
+            "maintainer_phone":      "",
+            "maintainer_email":      "",
+            "maintainer_company_id": "",
+            "company_support_phone": "",
+            "company_support_email": "",
+            "company_website":       "",
+            "pv_type":               "",
+            "device_types":          "",
+            "stage":                 "",
+            "system_date":           "",
+            "local_time":            "",
+            "gateway_status":        "",
+            "has_issues":            False,
+            "alarm_count":           0,
+            "alarms":                [],
+        }
 
-    # ── Stage 3: company pages in parallel (only if IDs were discovered) ─────
-    inst_cid  = data.get("installer_company_id", "")
-    maint_cid = data.get("maintainer_company_id", "")
+        # ── Stage 2: all sub-endpoints in parallel ───────────────────────────
+        t2 = time.time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            f_addr   = pool.submit(_timed_get, "address_details",
+                                   f"{base}/address_details", ajax_hdrs)
+            f_acc_aj = pool.submit(_timed_get, "access_details",
+                                   f"{base}/access_details",  ajax_hdrs)
+            f_acc_pg = pool.submit(_timed_get, "access page",
+                                   f"{ENLIGHTEN_BASE}/admin/sites/{site_id}/access")
+            f_sfdc   = pool.submit(_timed_get, "sfdc_details",
+                                   f"{base}/sfdc_details",    ajax_hdrs)
+            f_alarms = pool.submit(_timed_get, "standing_alarms",
+                                   f"{base}/standing_alarms", ajax_hdrs)
 
-    if inst_cid or maint_cid:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            f_inst  = pool.submit(_page_get, f"/admin/companies/{inst_cid}")  if inst_cid  else None
-            f_maint = pool.submit(_page_get, f"/admin/companies/{maint_cid}") if maint_cid else None
+            addr_html     = f_addr.result()
+            acc_ajax_html = f_acc_aj.result()
+            acc_page_html = f_acc_pg.result()
+            sfdc_html     = f_sfdc.result()
+            alarms_text   = f_alarms.result()
 
-            if f_inst:
-                cp = _parse_company_page(f_inst.result())
-                if cp.get("company_support_phone") and not data["installer_phone"]:
-                    data["installer_phone"] = cp["company_support_phone"]
-                if cp.get("company_support_email") and not data["installer_email"]:
-                    data["installer_email"] = cp["company_support_email"]
-                if cp.get("company_website") and not data["installer_website"]:
-                    data["installer_website"] = cp["company_website"]
-                data["company_support_phone"] = cp.get("company_support_phone", "")
-                data["company_support_email"] = cp.get("company_support_email", "")
-                data["company_website"]       = cp.get("company_website", "")
+        print(f"[scraper]   {'→ Stage 2 total':<22} {time.time()-t2:.1f}s  (parallel)")
 
-            if f_maint:
-                cp = _parse_company_page(f_maint.result())
-                if cp.get("company_support_phone") and not data["maintainer_phone"]:
-                    data["maintainer_phone"] = cp["company_support_phone"]
-                if cp.get("company_support_email") and not data["maintainer_email"]:
-                    data["maintainer_email"] = cp["company_support_email"]
-                if cp.get("company_website") and not data["company_website"]:
-                    data["company_website"] = cp["company_website"]
+        # Parse stage-2 results
+        if addr_html:
+            data.update({k: v for k, v in _parse_address_details(addr_html).items() if v})
+        if acc_ajax_html:
+            data.update({k: v for k, v in _parse_access_details(acc_ajax_html).items() if v})
+        if acc_page_html:
+            for k, v in _parse_access_page(acc_page_html).items():
+                if v:
+                    data[k] = v
+        if sfdc_html:
+            data.update({k: v for k, v in _parse_sfdc_status(sfdc_html).items()
+                         if v or k == "has_issues"})
+        if alarms_text and alarms_text.strip():
+            al = _parse_standing_alarms_csv(alarms_text)
+            data["alarms"]      = al.get("alarms", [])
+            data["alarm_count"] = al.get("alarm_count", 0)
+            if al.get("alarm_count", 0) > 0:
+                data["has_issues"] = True
 
-    print(f"[scraper] Site {site_id} fetched in {time.time() - t0:.1f}s")
+        # ── Stage 3: company pages in parallel ───────────────────────────────
+        inst_cid  = data.get("installer_company_id", "")
+        maint_cid = data.get("maintainer_company_id", "")
+
+        if inst_cid or maint_cid:
+            t3 = time.time()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                f_inst  = (pool.submit(_timed_get, "installer company",
+                                       f"{ENLIGHTEN_BASE}/admin/companies/{inst_cid}")
+                           if inst_cid else None)
+                f_maint = (pool.submit(_timed_get, "maintainer company",
+                                       f"{ENLIGHTEN_BASE}/admin/companies/{maint_cid}")
+                           if maint_cid else None)
+
+                if f_inst:
+                    cp = _parse_company_page(f_inst.result())
+                    if cp.get("company_support_phone") and not data["installer_phone"]:
+                        data["installer_phone"] = cp["company_support_phone"]
+                    if cp.get("company_support_email") and not data["installer_email"]:
+                        data["installer_email"] = cp["company_support_email"]
+                    if cp.get("company_website") and not data["installer_website"]:
+                        data["installer_website"] = cp["company_website"]
+                    data["company_support_phone"] = cp.get("company_support_phone", "")
+                    data["company_support_email"] = cp.get("company_support_email", "")
+                    data["company_website"]       = cp.get("company_website", "")
+
+                if f_maint:
+                    cp = _parse_company_page(f_maint.result())
+                    if cp.get("company_support_phone") and not data["maintainer_phone"]:
+                        data["maintainer_phone"] = cp["company_support_phone"]
+                    if cp.get("company_support_email") and not data["maintainer_email"]:
+                        data["maintainer_email"] = cp["company_support_email"]
+                    if cp.get("company_website") and not data["company_website"]:
+                        data["company_website"] = cp["company_website"]
+
+            print(f"[scraper]   {'→ Stage 3 total':<22} {time.time()-t3:.1f}s  (parallel)")
+
+    finally:
+        client.close()
+
+    total = time.time() - t0
+    print(f"[scraper] ── TOTAL: {total:.1f}s ─────────────────────────────")
     return data
 
 
