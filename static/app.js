@@ -1135,6 +1135,49 @@ Enphase Support Team`
   const CUSTOM_PREFIX = "custom-";
   let _customTemplates = [];
   let _editingTemplateId = null;
+  let _lastFocusedTplField = "ctpl-body";
+
+  const AVAILABLE_PLACEHOLDERS = [
+    { key: "Agent Name",          hint: "Your name — auto-filled from sidebar" },
+    { key: "Customer Name",       hint: "The customer's full name" },
+    { key: "Site ID",             hint: "Enlighten site ID number" },
+    { key: "System Name",         hint: "Name of the solar system" },
+    { key: "New Owner \u2014 Name",    hint: "New owner's full name" },
+    { key: "New Owner \u2014 Email",   hint: "New owner's email address" },
+    { key: "New Owner \u2014 Address", hint: "New owner's street address" },
+    { key: "Installer \u2014 Name",   hint: "Installer company or contact name" },
+    { key: "Installer \u2014 Phone",  hint: "Installer phone number" },
+    { key: "Maintainer \u2014 Name",  hint: "Maintainer company or contact name" },
+    { key: "Maintainer \u2014 Phone", hint: "Maintainer phone number" },
+    { key: "Issue",               hint: "Description of the issue or alarm" },
+    { key: "Support Phone",       hint: "Enphase regional support number" },
+  ];
+
+  function renderPlaceholderChips() {
+    const c = document.getElementById("tpl-ph-chips");
+    if (!c || c.children.length) return;
+    AVAILABLE_PLACEHOLDERS.forEach(ph => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.title = ph.hint;
+      btn.textContent = ph.key;
+      btn.style.cssText = "display:inline-flex;align-items:center;padding:3px 9px;border:1px solid #e2e8f0;border-radius:20px;background:#f8fafc;font-size:11px;font-weight:600;color:#475569;cursor:pointer;font-family:var(--font-sans);white-space:nowrap;transition:background .1s,border-color .1s,color .1s";
+      btn.addEventListener("mousedown", e => e.preventDefault());
+      btn.addEventListener("mouseenter", () => { btn.style.background="#fff7ed"; btn.style.borderColor="var(--primary)"; btn.style.color="var(--primary)"; });
+      btn.addEventListener("mouseleave", () => { btn.style.background="#f8fafc"; btn.style.borderColor="#e2e8f0"; btn.style.color="#475569"; });
+      btn.addEventListener("click", () => {
+        const el = document.getElementById(_lastFocusedTplField);
+        if (!el) return;
+        const tag = `[[${ph.key}]]`;
+        const s = el.selectionStart ?? el.value.length;
+        const e2 = el.selectionEnd ?? el.value.length;
+        el.value = el.value.slice(0, s) + tag + el.value.slice(e2);
+        el.selectionStart = el.selectionEnd = s + tag.length;
+        el.focus();
+      });
+      c.appendChild(btn);
+    });
+  }
 
   function parsePlaceholders(text) {
     const seen = [], re = /\[\[([^\]]+)\]\]/g;
@@ -1304,6 +1347,30 @@ Enphase Support Team`
     } catch { showToast("Failed to delete template", "error"); }
   }
 
+  function openFeatureRequestModal() {
+    const nameEl = document.getElementById("fr-name");
+    if (nameEl) nameEl.value = agentUsername || "";
+    document.getElementById("feature-req-modal").classList.remove("hidden");
+  }
+
+  function closeFeatureRequestModal() {
+    document.getElementById("feature-req-modal").classList.add("hidden");
+  }
+
+  function submitFeatureRequest() {
+    const name = (document.getElementById("fr-name")?.value || "").trim();
+    const type = document.getElementById("fr-type")?.value || "Other";
+    const desc = (document.getElementById("fr-body")?.value || "").trim();
+    if (!desc) { showToast("Please describe your request", "error"); return; }
+    const subject = encodeURIComponent(`COO Mail Forge \u2014 ${type}`);
+    const bodyEnc = encodeURIComponent(`Feature Request\nFrom: ${name || "COO Agent"}\nType: ${type}\n\n${desc}\n\n---\nSent via COO Mail Forge`);
+    const to = "mshariff@enphaseenergy.com";
+    const cc = encodeURIComponent("mohammadmaaz@enphaseenergy.com,jbenya@enphaseenergy.com");
+    window.open(`mailto:${to}?cc=${cc}&subject=${subject}&body=${bodyEnc}`, "_self");
+    closeFeatureRequestModal();
+    showToast("Opening Outlook\u2026", "success");
+  }
+
   function downloadChart(chartKey, filename) {
     const chart = activeCharts[chartKey];
     if (!chart) { showToast("Chart not loaded yet", "error"); return; }
@@ -1375,6 +1442,11 @@ Enphase Support Team`
     await loadAndInjectCustomTemplates();
     selectScenario(currentScenarioId);
     checkSessionOnLoad();
+    renderPlaceholderChips();
+    const _ts = document.getElementById("ctpl-subject");
+    const _tb = document.getElementById("ctpl-body");
+    if (_ts) _ts.addEventListener("focus", () => { _lastFocusedTplField = "ctpl-subject"; });
+    if (_tb) _tb.addEventListener("focus", () => { _lastFocusedTplField = "ctpl-body"; });
   }
 
   document.addEventListener("DOMContentLoaded", initialize);
@@ -1388,6 +1460,9 @@ Enphase Support Team`
   window.submitCustomTemplate      = submitCustomTemplate;
   window.downloadChart             = downloadChart;
   window.customizeCurrentScenario  = customizeCurrentScenario;
+  window.openFeatureRequestModal   = openFeatureRequestModal;
+  window.closeFeatureRequestModal  = closeFeatureRequestModal;
+  window.submitFeatureRequest      = submitFeatureRequest;
 
   /* inject btn-chart-dl style */
   const _s = document.createElement("style");

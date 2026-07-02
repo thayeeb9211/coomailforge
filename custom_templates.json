@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "52fe9034-7375-4cc9-aed6-bfdd8032f609",
+    "label": "Transfer complete \u2014 system normal (custom)",
+    "to_template": "Homeowner",
+    "subject_template": "Enphase Update: Ownership Transfer (Site ID: [[Site ID]])",
+    "body_template": "Dear [[Customer Name]],\n\nThank you for contacting Enphase.\n\nThis is regarding Site ID: [[Site ID]] with the system name \"[[System Name]]\". Ownership of the system has been successfully transferred to the new owner listed below.\n\n[[agent name]]\n\nNew Owner Details:\nName: [[New Owner \u2014 Name]]\nEmail: [[New Owner \u2014 Email]]\nAddress: [[New Owner \u2014 Address]]\n\nYou may update the system name via Menu > Account > My Information > System Name.\n\nAccess your system:\nEnphase App: https://enphase.com/en-in/homeowners/enphase-app\nEnlighten Web Portal: https://enlighten.enphaseenergy.com/\nHow-to Video: https://www.youtube.com/watch?v=ZAkoKI5rGvY\n\nA health scan performed today confirms your system is fully operational. For future assistance contact your Maintainer ([[Maintainer \u2014 Name]] at [[Maintainer \u2014 Phone]]), Installer ([[Installer \u2014 Name]] at [[Installer \u2014 Phone]]), or Enphase Support at (877) 797-4743.\n\nThank you for choosing Enphase.\n\nWarm regards,\nEnphase Support Team",
+    "fields": [],
+    "created_at": "2026-07-02T13:42:44.331877+00:00",
+    "created_by": "Support Agent"
+  }
+]
