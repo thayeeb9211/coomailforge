@@ -17,6 +17,9 @@ data/
 # Executables
 *.exe
 
+# Logs
+server.log
+
 # OS
 .DS_Store
 Thumbs.db
