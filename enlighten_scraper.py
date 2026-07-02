@@ -6,6 +6,7 @@ Step 2: Session cookies are saved to disk.
 Step 3: httpx reuses those cookies to fetch Enlighten admin pages.
 Step 4: BeautifulSoup parses the HTML to extract site data.
 """
+import concurrent.futures
 import csv
 import io
 import json
@@ -183,10 +184,17 @@ def clear_session():
 
 def fetch_site(site_id):
     """
-    Fetch site details via Enlighten's AJAX sub-endpoints.
-    The main admin page is a JS shell — all content loads via XHR calls.
-    Confirmed endpoints: address_details, access_details.
+    Fetch site details via Enlighten's AJAX sub-endpoints — parallelised.
+
+    Stage 1 (sequential): main admin page — session check + CSRF token.
+    Stage 2 (parallel):   address_details, access_details, access page,
+                          sfdc_details, standing_alarms — all at once.
+    Stage 3 (parallel):   installer + maintainer company pages — if IDs found.
+
+    Reduces ~8 sequential round-trips to 3 staged bursts.
     """
+    t0 = time.time()
+
     cookies = _load_session()
     if not cookies:
         raise ValueError("No saved session. Please log in to Enlighten first.")
@@ -194,10 +202,10 @@ def fetch_site(site_id):
     cookie_dict = _as_dict(cookies)
     base = f"{ENLIGHTEN_BASE}/admin/sites/{site_id}"
 
-    # Step 1: main page — CSRF token + system name
+    # ── Stage 1: main page (must be first — session validation + CSRF) ──────
     try:
         r_main = httpx.get(base, cookies=cookie_dict, headers=_HEADERS,
-                           follow_redirects=True, timeout=15)
+                           follow_redirects=True, timeout=12)
     except httpx.TimeoutException:
         raise ValueError("Request timed out. Check your VPN/connection.")
 
@@ -223,113 +231,112 @@ def fetch_site(site_id):
         ajax_headers["X-CSRF-Token"] = csrf_tok
 
     data = {
-        "site_id":                  str(site_id),
-        "system_name":              h1.get_text(strip=True) if h1 else f"Site {site_id}",
-        "address":                  "",
-        "installer_name":           "",
-        "installer_phone":          "",
-        "installer_email":          "",
-        "installer_website":        "",
-        "installer_company_id":     "",
-        "maintainer_name":          "",
-        "maintainer_phone":         "",
-        "maintainer_email":         "",
-        "maintainer_company_id":    "",
-        "company_support_phone":    "",
-        "company_support_email":    "",
-        "company_website":          "",
-        "pv_type":                  "",
-        "device_types":             "",
-        "stage":                    "",
-        "system_date":              "",
-        "local_time":               "",
-        "gateway_status":           "",
-        "has_issues":               False,
-        "alarm_count":              0,
-        "alarms":                   [],
+        "site_id":               str(site_id),
+        "system_name":           h1.get_text(strip=True) if h1 else f"Site {site_id}",
+        "address":               "",
+        "installer_name":        "",
+        "installer_phone":       "",
+        "installer_email":       "",
+        "installer_website":     "",
+        "installer_company_id":  "",
+        "maintainer_name":       "",
+        "maintainer_phone":      "",
+        "maintainer_email":      "",
+        "maintainer_company_id": "",
+        "company_support_phone": "",
+        "company_support_email": "",
+        "company_website":       "",
+        "pv_type":               "",
+        "device_types":          "",
+        "stage":                 "",
+        "system_date":           "",
+        "local_time":            "",
+        "gateway_status":        "",
+        "has_issues":            False,
+        "alarm_count":           0,
+        "alarms":                [],
     }
 
-    def _ajax_get(endpoint):
+    def _ajax_get(endpoint, timeout=8):
         try:
             r = httpx.get(f"{base}/{endpoint}", cookies=cookie_dict,
-                          headers=ajax_headers, follow_redirects=True, timeout=10)
+                          headers=ajax_headers, follow_redirects=True, timeout=timeout)
             return r.text if r.status_code == 200 else ""
         except Exception:
             return ""
 
-    def _plain_get(path):
-        """Fetch a full page (not AJAX) using session cookies."""
+    def _page_get(path, timeout=8):
         try:
             r = httpx.get(f"{ENLIGHTEN_BASE}{path}", cookies=cookie_dict,
-                          headers=_HEADERS, follow_redirects=True, timeout=12)
+                          headers=_HEADERS, follow_redirects=True, timeout=timeout)
             return r.text if r.status_code == 200 else ""
         except Exception:
             return ""
 
-    # Step 2: address_details
-    addr_html = _ajax_get("address_details")
+    # ── Stage 2: fire all sub-endpoints simultaneously ───────────────────────
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+        f_addr   = pool.submit(_ajax_get, "address_details")
+        f_acc_aj = pool.submit(_ajax_get, "access_details")
+        f_acc_pg = pool.submit(_page_get, f"/admin/sites/{site_id}/access")
+        f_sfdc   = pool.submit(_ajax_get, "sfdc_details")
+        f_alarms = pool.submit(_ajax_get, "standing_alarms")
+
+        addr_html     = f_addr.result()
+        acc_ajax_html = f_acc_aj.result()
+        acc_page_html = f_acc_pg.result()
+        sfdc_html     = f_sfdc.result()
+        alarms_text   = f_alarms.result()
+
+    # Parse stage-2 results
     if addr_html:
         data.update({k: v for k, v in _parse_address_details(addr_html).items() if v})
-
-    # Step 3: access_details AJAX (fallback company extraction)
-    access_html = _ajax_get("access_details")
-    if access_html:
-        data.update({k: v for k, v in _parse_access_details(access_html).items() if v})
-
-    # Step 4: full access page — richer company/role extraction (overrides step 3)
-    access_page_html = _plain_get(f"/admin/sites/{site_id}/access")
-    if access_page_html:
-        ap = _parse_access_page(access_page_html)
-        for k, v in ap.items():
+    if acc_ajax_html:
+        data.update({k: v for k, v in _parse_access_details(acc_ajax_html).items() if v})
+    if acc_page_html:
+        for k, v in _parse_access_page(acc_page_html).items():
             if v:
                 data[k] = v
-
-    # Step 5: company pages for installer and maintainer
-    for role, phone_key, email_key, website_key in [
-        ("installer_company_id",  "installer_phone",   "installer_email",   "installer_website"),
-        ("maintainer_company_id", "maintainer_phone",  "maintainer_email",  "company_website"),
-    ]:
-        cid = data.get(role, "")
-        if cid:
-            try:
-                r_comp = httpx.get(f"{ENLIGHTEN_BASE}/admin/companies/{cid}",
-                                   cookies=cookie_dict, headers=_HEADERS,
-                                   follow_redirects=True, timeout=10)
-                if r_comp.status_code == 200:
-                    cp = _parse_company_page(r_comp.text)
-                    if cp.get("company_support_phone") and not data[phone_key]:
-                        data[phone_key] = cp["company_support_phone"]
-                    if cp.get("company_support_email") and not data[email_key]:
-                        data[email_key] = cp["company_support_email"]
-                    if cp.get("company_website") and not data[website_key]:
-                        data[website_key] = cp["company_website"]
-                    # Also store in top-level for primary installer
-                    if role == "installer_company_id":
-                        data["company_support_phone"] = cp.get("company_support_phone", "")
-                        data["company_support_email"] = cp.get("company_support_email", "")
-                        data["company_website"]       = cp.get("company_website", "")
-            except Exception:
-                pass
-
-    # Step 6: sfdc_details — stage, system date, local time
-    sfdc_html = _ajax_get("sfdc_details")
     if sfdc_html:
-        st = _parse_sfdc_status(sfdc_html)
-        data.update({k: v for k, v in st.items() if v or k == "has_issues"})
+        data.update({k: v for k, v in _parse_sfdc_status(sfdc_html).items()
+                     if v or k == "has_issues"})
+    if alarms_text and alarms_text.strip():
+        al = _parse_standing_alarms_csv(alarms_text)
+        data["alarms"]      = al.get("alarms", [])
+        data["alarm_count"] = al.get("alarm_count", 0)
+        if al.get("alarm_count", 0) > 0:
+            data["has_issues"] = True
 
-    # Step 7: standing_alarms — CSV endpoint with actual alarm rows
-    try:
-        r_alarms = httpx.get(f"{base}/standing_alarms", cookies=cookie_dict,
-                             headers=ajax_headers, follow_redirects=True, timeout=10)
-        if r_alarms.status_code == 200 and r_alarms.text.strip():
-            al = _parse_standing_alarms_csv(r_alarms.text)
-            data["alarms"]      = al.get("alarms", [])
-            data["alarm_count"] = al.get("alarm_count", 0)
-            if al.get("alarm_count", 0) > 0:
-                data["has_issues"] = True
-    except Exception:
-        pass
+    # ── Stage 3: company pages in parallel (only if IDs were discovered) ─────
+    inst_cid  = data.get("installer_company_id", "")
+    maint_cid = data.get("maintainer_company_id", "")
 
+    if inst_cid or maint_cid:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            f_inst  = pool.submit(_page_get, f"/admin/companies/{inst_cid}")  if inst_cid  else None
+            f_maint = pool.submit(_page_get, f"/admin/companies/{maint_cid}") if maint_cid else None
+
+            if f_inst:
+                cp = _parse_company_page(f_inst.result())
+                if cp.get("company_support_phone") and not data["installer_phone"]:
+                    data["installer_phone"] = cp["company_support_phone"]
+                if cp.get("company_support_email") and not data["installer_email"]:
+                    data["installer_email"] = cp["company_support_email"]
+                if cp.get("company_website") and not data["installer_website"]:
+                    data["installer_website"] = cp["company_website"]
+                data["company_support_phone"] = cp.get("company_support_phone", "")
+                data["company_support_email"] = cp.get("company_support_email", "")
+                data["company_website"]       = cp.get("company_website", "")
+
+            if f_maint:
+                cp = _parse_company_page(f_maint.result())
+                if cp.get("company_support_phone") and not data["maintainer_phone"]:
+                    data["maintainer_phone"] = cp["company_support_phone"]
+                if cp.get("company_support_email") and not data["maintainer_email"]:
+                    data["maintainer_email"] = cp["company_support_email"]
+                if cp.get("company_website") and not data["company_website"]:
+                    data["company_website"] = cp["company_website"]
+
+    print(f"[scraper] Site {site_id} fetched in {time.time() - t0:.1f}s")
     return data
 
 
