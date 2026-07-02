@@ -1,5 +1,6 @@
-# Secrets — never commit credentials
+# Secrets — never commit credentials or session cookies
 config.json
+enlighten_session.json
 
 # Python
 __pycache__/
@@ -9,5 +10,12 @@ __pycache__/
 venv/
 .venv/
 
-# Vercel
-.vercel/
+# Data — never commit the database or migrated files
+data/
+
+# Executables
+*.exe
+
+# OS
+.DS_Store
+Thumbs.db

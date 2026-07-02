@@ -1,571 +1,332 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enphase COO Email Tool</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root{
-  --bg:#f0f4f8;--surface:#ffffff;--surface2:#f8fafc;
-  --border:#e2e8f0;--border2:#cbd5e1;
-  --primary:#f47920;--primary-dark:#d4620f;--primary-light:#fff4ed;
-  --text:#1e293b;--muted:#64748b;--subtle:#94a3b8;
-  --success:#16a34a;--success-bg:#f0fdf4;--success-border:#bbf7d0;
-  --focus-ring:rgba(244,121,32,0.25);
-  --radius:10px;--radius-sm:6px;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-
-/* ── Header ── */
-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;height:60px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.logo{display:flex;align-items:center;gap:.75rem}
-.logo-mark{width:34px;height:34px;background:var(--primary);border-radius:8px;display:flex;align-items:center;justify-content:center}
-.logo-mark svg{fill:#fff;width:20px;height:20px}
-.logo-text{font-size:1rem;font-weight:700;color:var(--text)}
-.logo-text span{color:var(--primary)}
-.header-link{font-size:.78rem;color:var(--muted);text-decoration:none;padding:.35rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);transition:all .15s}
-.header-link:hover{border-color:var(--primary);color:var(--primary)}
-
-/* ── Layout ── */
-.page{max-width:1180px;margin:0 auto;padding:2rem;display:grid;grid-template-columns:320px 1fr;gap:1.75rem;align-items:start}
-
-/* ── Card ── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;box-shadow:0 1px 4px rgba(0,0,0,.05)}
-.card-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:1.1rem;display:flex;align-items:center;gap:.5rem}
-.card-title::before{content:'';display:block;width:3px;height:14px;background:var(--primary);border-radius:2px}
-
-/* ── Steps ── */
-.step-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--primary);margin-bottom:.4rem}
-.section-gap{margin-top:1.4rem}
-
-/* ── Form elements ── */
-.fg{display:flex;flex-direction:column;gap:.35rem;margin-bottom:.9rem}
-label{font-size:.78rem;font-weight:500;color:var(--text)}
-label span{color:var(--subtle);font-weight:400}
-select,input,textarea{width:100%;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:.55rem .75rem;font-size:.85rem;font-family:inherit;color:var(--text);background:var(--surface);transition:border-color .15s,box-shadow .15s;outline:none}
-select:focus,input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--focus-ring)}
-textarea{resize:vertical;line-height:1.6}
-select{cursor:pointer}
-option:disabled{color:var(--subtle)}
-
-/* ── Region badge strip ── */
-.region-info{background:var(--primary-light);border:1px solid #fed7aa;border-radius:var(--radius-sm);padding:.6rem .85rem;font-size:.78rem;color:#9a3412;display:none;margin-top:.35rem}
-.region-info strong{font-weight:600}
-
-/* ── Dynamic fields ── */
-#dynamic-fields .fg{margin-bottom:.85rem}
-.field-section{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:.9rem}
-.field-section-title{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.75rem}
-
-/* ── Generate button ── */
-.btn-primary{width:100%;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);padding:.7rem 1.5rem;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .15s,transform .1s;margin-top:.5rem;font-family:inherit}
-.btn-primary:hover{background:var(--primary-dark);transform:translateY(-1px)}
-.btn-primary:active{transform:translateY(0)}
-.btn-primary:disabled{background:var(--subtle);cursor:not-allowed;transform:none}
-
-/* ── Output panel ── */
-.output-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)}
-.output-header{padding:1.1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.output-header h2{font-size:.95rem;font-weight:600;color:var(--text)}
-.output-body{padding:1.5rem}
-
-/* ── To/Send row ── */
-.to-row{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:var(--muted)}
-.to-row strong{color:var(--text);font-weight:600}
-
-/* ── Subject / Body blocks ── */
-.output-block{margin-bottom:1.25rem}
-.output-block-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.45rem}
-.output-block-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
-.copy-btn{background:none;border:1px solid var(--border2);border-radius:5px;padding:.25rem .65rem;font-size:.72rem;font-weight:600;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:.3rem;transition:all .15s;font-family:inherit}
-.copy-btn:hover{border-color:var(--primary);color:var(--primary)}
-.copy-btn.copied{border-color:var(--success);color:var(--success);background:var(--success-bg)}
-.copy-btn svg{width:12px;height:12px;stroke:currentColor;fill:none}
-
-.subject-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.7rem 1rem;font-size:.88rem;font-weight:500;color:var(--text);font-family:'Inter',sans-serif;word-break:break-word}
-
-.body-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem 1.2rem;font-size:.85rem;color:var(--text);font-family:'Inter',sans-serif;white-space:pre-wrap;line-height:1.75;word-break:break-word;max-height:520px;overflow-y:auto}
-
-/* ── Empty state ── */
-.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3.5rem 2rem;color:var(--subtle);gap:.75rem;text-align:center}
-.empty-state svg{opacity:.35;width:52px;height:52px;stroke:currentColor;fill:none}
-.empty-state p{font-size:.88rem;max-width:280px;line-height:1.6}
-
-/* ── Scenario badge ── */
-.scenario-badge{display:inline-flex;align-items:center;gap:.4rem;background:var(--primary-light);border:1px solid #fed7aa;border-radius:5px;padding:.25rem .65rem;font-size:.72rem;font-weight:600;color:#9a3412;margin-bottom:1rem}
-
-/* responsive */
-@media(max-width:860px){.page{grid-template-columns:1fr}}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COO Mail Forge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="alternate icon" href="/static/favicon.ico" sizes="any">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <div class="logo-mark">
-      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    </div>
-    <span class="logo-text">Enphase <span>COO Tool</span></span>
-  </div>
-  <a href="/api-portal" class="header-link">API Portal →</a>
-</header>
-
-<div class="page">
-
-  <!-- LEFT: Controls -->
-  <div>
-    <div class="card">
-      <div class="card-title">Build Email</div>
-
-      <!-- Step 1: Region -->
-      <div class="step-label">Step 1 — Region</div>
-      <div class="fg">
-        <label>Support Region</label>
-        <select id="sel-region" onchange="onRegionChange()">
-          <option value="" disabled selected>Select a region…</option>
-          <option value="US">United States</option>
-          <option value="DE">Germany</option>
-          <option value="AT">Austria</option>
-          <option value="CH">Switzerland</option>
-          <option value="NL">Netherlands</option>
-          <option value="BE">Belgium</option>
-          <option value="FR">France</option>
-          <option value="LU">Luxembourg</option>
-          <option value="GB">United Kingdom</option>
-          <option value="ES">Spain</option>
-        </select>
-        <div id="region-info" class="region-info"></div>
+  <!-- Login Wall -->
+  <div class="login-wall hidden" id="login-wall">
+    <div class="lw-card">
+      <div class="lw-logo">
+        <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       </div>
+      <div class="lw-title">COO Mail Forge</div>
+      <div class="lw-sub">Sign in to Enlighten once to unlock the Site Health Checker, contact auto-fill, and alarm monitoring features.</div>
+      <button class="lw-btn" id="lw-login-btn" onclick="startEnlightenLogin(true)">Login to Enlighten</button>
+      <p class="lw-hint">Log in once — your session will be reused until it expires.<br>You can still build emails manually without logging in.</p>
+      <button class="lw-skip" onclick="dismissLoginWall()">Skip — I'll log in later</button>
+    </div>
+  </div>
 
-      <!-- Step 2: Scenario -->
-      <div class="section-gap">
-        <div class="step-label">Step 2 — Scenario</div>
-        <div class="fg">
-          <label>Email Template</label>
-          <select id="sel-scenario" onchange="onScenarioChange()">
-            <option value="" disabled selected>Select a scenario…</option>
-            <optgroup label="COO Completed">
-              <option value="coo_normal">COO Completed — System Normal</option>
-              <option value="coo_issue">COO Completed — System Has Issues</option>
-            </optgroup>
-            <optgroup label="Documents Required">
-              <option value="doc_name">Docs Needed — Name Mismatch</option>
-              <option value="doc_address">Docs Needed — Address Mismatch</option>
-              <option value="doc_name_address">Docs Needed — Name &amp; Address Mismatch</option>
-              <option value="doc_missing">Docs Needed — Not Attached</option>
-            </optgroup>
-            <optgroup label="Special Cases">
-              <option value="lease_denial">Lease Site — Customer Denial</option>
-              <option value="already_owner">Existing Owner / Already Owner</option>
-            </optgroup>
-          </select>
+  <!-- Custom Template Modal -->
+  <div class="login-wall hidden" id="custom-tpl-modal" style="z-index:9100">
+    <div class="lw-card" style="max-width:620px;text-align:left;padding:32px 36px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--primary);margin-bottom:4px">Custom Template Builder</div>
+          <h3 style="font-size:20px;font-weight:800;color:var(--text-main);letter-spacing:-.02em">New Email Template</h3>
+        </div>
+        <button onclick="closeTemplateModal()" style="background:var(--secondary-soft);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0">&times;</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label style="font-size:12.5px;font-weight:700;color:var(--text-muted)">Template Name <span style="color:#dc2626">*</span></label>
+          <input type="text" id="ctpl-label" class="form-control" placeholder="e.g. System Offline Notification">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label style="font-size:12.5px;font-weight:700;color:var(--text-muted)">TO: (recipient)</label>
+            <input type="text" id="ctpl-to" class="form-control" placeholder="Homeowner / Installer">
+          </div>
+          <div class="form-group">
+            <label style="font-size:12.5px;font-weight:700;color:var(--text-muted)">CC: (optional)</label>
+            <input type="text" id="ctpl-cc" class="form-control" placeholder="Supervisor">
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="font-size:12.5px;font-weight:700;color:var(--text-muted)">Subject <span style="font-weight:400;color:var(--text-light)">— use [[Placeholder]] for dynamic values</span></label>
+          <input type="text" id="ctpl-subject" class="form-control" placeholder="Enphase: [[Site ID]] — Action Required">
+        </div>
+        <div class="form-group">
+          <label style="font-size:12.5px;font-weight:700;color:var(--text-muted)">Email Body <span style="font-weight:400;color:var(--text-light)">— [[Placeholder]] becomes a form field · [[Agent Name]] = your name</span></label>
+          <textarea id="ctpl-body" class="form-control" rows="9" placeholder="Dear [[Customer Name]],&#10;&#10;This is regarding Site ID: [[Site ID]].&#10;&#10;...&#10;&#10;Warm regards,&#10;[[Agent Name]]&#10;Enphase Support Team"></textarea>
+        </div>
+        <div style="background:var(--primary-soft);border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;line-height:1.5">
+          <strong>💡 How placeholders work:</strong> Any <code style="background:#fff;padding:1px 5px;border-radius:4px">[[Text]]</code> you type automatically becomes a fillable field when you use this template. <code>[[Agent Name]]</code> is reserved for your name.
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px">
+          <button class="btn btn-secondary" onclick="closeTemplateModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="submitCustomTemplate()">Save Template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-layout">
+
+    <!-- ═══ Sidebar ═══════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-area">
+          <img src="/static/logo.svg" alt="COO Mail Forge" style="width:38px;height:38px;border-radius:9px;flex-shrink:0">
+          <div>
+            <h1 class="app-title" style="margin:0">MailForge</h1>
+            <p class="app-subtitle" style="margin:0">COO &amp; DOO Operations</p>
+          </div>
         </div>
       </div>
 
-      <!-- Step 3: Dynamic Fields -->
-      <div class="section-gap" id="fields-section" style="display:none">
-        <div class="step-label">Step 3 — Fill Details</div>
-        <div id="dynamic-fields"></div>
-        <button class="btn-primary" onclick="generateEmail()">Generate Email Draft</button>
+      <!-- Nav Tabs -->
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="compose">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          Compose
+        </button>
+        <button class="nav-tab" data-tab="analytics">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Analytics
+        </button>
       </div>
-    </div>
+
+      <!-- Sidebar Body -->
+      <div class="sidebar-body">
+
+        <!-- Agent Signature -->
+        <div class="sidebar-card">
+          <h4 class="sidebar-card-title">Agent Signature</h4>
+          <p class="sidebar-card-desc">Your name is automatically added to every generated email template.</p>
+          <div class="form-group" style="margin-top:10px">
+            <input type="text" id="sidebar-username-input" class="form-control sidebar-input" placeholder="Support Agent">
+          </div>
+        </div>
+
+        <!-- Enlighten Site Scanner -->
+        <div class="sidebar-card enl-card">
+          <div class="card-title-row">
+            <h4 class="sidebar-card-title">Enlighten Scanner</h4>
+            <span class="pill-badge">Live</span>
+          </div>
+          <p class="sidebar-card-desc">Scan any site to auto-fill installer details, contacts, and alarm status into your email template.</p>
+
+          <div class="enl-session-row">
+            <span class="enl-dot no" id="enl-dot"></span>
+            <span class="enl-session-label" id="enl-session-label">Checking session…</span>
+          </div>
+
+          <div class="enl-site-row">
+            <input type="text" id="enl-site-id" class="form-control" placeholder="Site ID e.g. 6340828" inputmode="numeric">
+            <button class="btn-enl-scan" id="enl-fetch-btn" onclick="fetchFromEnlighten()">Scan Site</button>
+          </div>
+
+          <button class="btn-enl-login" id="enl-login-btn" onclick="startEnlightenLogin(false)">Login to Enlighten</button>
+        </div>
+
+        <!-- My Custom Templates -->
+        <div class="sidebar-card" style="border-color:#ddd6fe;background:linear-gradient(135deg,#faf5ff 0%,#fff 60%)">
+          <div class="card-title-row">
+            <h4 class="sidebar-card-title">My Templates</h4>
+            <button onclick="openNewTemplateModal()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--font-sans);letter-spacing:.03em">+ NEW</button>
+          </div>
+          <p class="sidebar-card-desc">Build reusable templates for any workflow. Use [[Placeholder]] to create dynamic fields.</p>
+          <div id="custom-tpl-list" style="margin-top:10px"></div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="sidebar-footer">
+        <span class="version-text">v3.0.0 Stable</span>
+        <span class="status-indicator-wrapper">
+          <span class="status-dot online" id="status-dot"></span>
+          <span class="status-text" id="status-text">Server Online</span>
+        </span>
+      </div>
+    </aside>
+
+    <!-- ═══ Main Workspace ════════════════════════════════════ -->
+    <main class="main-content">
+
+      <!-- ── COMPOSE TAB ─────────────────────────────────────── -->
+      <section class="tab-view active" id="view-compose">
+
+        <!-- Scenario Selector -->
+        <header class="view-header scenario-selection-header">
+          <div class="selector-container">
+            <label for="scenario-select" class="dropdown-label">Active Scenario Workflow</label>
+            <select id="scenario-select" class="form-control select-scenario-dropdown">
+              <optgroup label="Change of Ownership (COO) Templates">
+                <option value="coo-normal" selected>COO Complete — System Normal</option>
+                <option value="coo-not-normal">COO Complete — System Has Issue</option>
+                <option value="coo-name-mismatch">Document Request — Name Mismatch</option>
+                <option value="coo-address-mismatch">Document Request — Address Mismatch</option>
+                <option value="coo-name-address-mismatch">Document Request — Name &amp; Address Mismatch</option>
+                <option value="coo-docs-missing">Document Request — Documents Not Attached</option>
+                <option value="coo-lease-denial">Document Request — Lease Site Denial</option>
+                <option value="coo-existing-owner">Document Request — Requester Already Owner</option>
+                <option value="coo-exceptions">Exceptions (Death / Divorce / Family)</option>
+                <option value="coo-standard-steps">Standard Transfer Next Steps</option>
+              </optgroup>
+              <optgroup label="Declaration of Ownership (DOO) Templates">
+                <option value="doo-lease-a-to-b">Lease A to Lease B</option>
+                <option value="doo-lease-to-resi">Lease/PPA to Residential</option>
+                <option value="doo-misconfig-resi-lease">Misconfig: Resi tagged as Lease</option>
+                <option value="doo-misconfig-lease-resi">Misconfig: Lease tagged as Resi</option>
+              </optgroup>
+              <optgroup label="Guidelines &amp; Administrative Checklists">
+                <option value="admin-sold-remove">Sold System — Remove Owner</option>
+                <option value="admin-payment-issues">Payment Issues (COO/DOO)</option>
+                <option value="admin-other-scenarios">Other Scenarios (Host, Builders, etc.)</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="scenario-details-bubble">
+            <div class="badge coo" id="scenario-badge">Change of Ownership</div>
+            <p class="scenario-description-bubble" id="scenario-desc">Choose a scenario above to start drafting correspondence.</p>
+          </div>
+        </header>
+
+        <!-- Site Health Dashboard (hidden until scan) -->
+        <div id="site-health-dashboard" style="display:none"></div>
+
+        <!-- Workspace Grid -->
+        <div class="workspace-grid">
+          <!-- Left: Input Form -->
+          <div class="card form-card">
+            <div class="card-header">
+              <h3 class="card-title">Required Details</h3>
+              <span class="card-subtitle">Values entered here populate the email template. Scan a site to auto-fill.</span>
+            </div>
+            <div class="form-body">
+              <div class="form-group">
+                <label for="region-select">Region <span class="hint">(logged with analytics)</span></label>
+                <select id="region-select" class="form-control"></select>
+              </div>
+              <div id="dynamic-form-fields"></div>
+            </div>
+          </div>
+
+          <!-- Right: Email Preview -->
+          <div class="preview-panel">
+            <div class="preview-sticky">
+              <div class="preview-header-row">
+                <h3 class="preview-title">Draft Preview</h3>
+                <span class="preview-subtitle">Check the details before copying.</span>
+              </div>
+              <div class="email-drafts-container" id="email-drafts-container"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── ANALYTICS TAB ───────────────────────────────────── -->
+      <section class="tab-view" id="view-analytics">
+        <header class="view-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+          <div>
+            <h2 style="font-size:22px;font-weight:800;color:var(--text-main);letter-spacing:-0.02em">Operations Dashboard</h2>
+            <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Analytics on COO and DOO cases logged by the team.</p>
+          </div>
+          <a href="/api/analytics/export" class="btn" style="text-decoration:none" title="Download all logged cases as CSV">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </a>
+          <button class="btn" id="btn-clear-all-data" style="color:#dc2626;border-color:#fecaca;background:#fef2f2" title="Permanently delete all logged case data">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Clear All Data
+          </button>
+        </header>
+
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Total Logged Cases</span>
+              <div class="metric-icon total">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              </div>
+            </div>
+            <span class="metric-value" id="metric-total">0</span>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Change of Ownership (COO)</span>
+              <div class="metric-icon coo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+            </div>
+            <span class="metric-value" id="metric-coo">0</span>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Declaration of Ownership (DOO)</span>
+              <div class="metric-icon doo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+            </div>
+            <span class="metric-value" id="metric-doo">0</span>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-layout">
+          <div class="card chart-card timeline-card">
+            <div class="chart-header">
+              <h3 class="card-title">Case Volume Over Time</h3>
+              <div style="display:flex;align-items:center;gap:8px">
+              <button class="btn-chart-dl" onclick="downloadChart('timeline','case-volume')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+              <div class="timeline-tabs">
+                <button class="timeline-tab active" data-granularity="day">Daily</button>
+                <button class="timeline-tab" data-granularity="week">Weekly</button>
+                <button class="timeline-tab" data-granularity="month">Monthly</button>
+              </div>
+              </div>
+            </div>
+            <div class="chart-container"><canvas id="chart-timeline"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <div class="chart-header"><h3 class="card-title">Region-Based Analysis</h3><button class="btn-chart-dl" onclick="downloadChart('region','region-analysis')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+            <div class="chart-container donut"><canvas id="chart-region"></canvas></div>
+          </div>
+          <div class="card chart-card">
+            <div class="chart-header"><h3 class="card-title">Case Categories</h3><button class="btn-chart-dl" onclick="downloadChart('category','case-categories')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
+            <div class="chart-container donut"><canvas id="chart-category"></canvas></div>
+          </div>
+          <div class="card table-card">
+            <div class="card-header">
+              <h3 class="card-title">Scenario Breakdowns</h3>
+              <span class="card-subtitle">Volume distribution across specific scenarios</span>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Scenario Name</th>
+                    <th>Category</th>
+                    <th class="text-right">Total Cases Logged</th>
+                  </tr>
+                </thead>
+                <tbody id="scenario-stats-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
   </div>
 
-  <!-- RIGHT: Output -->
-  <div class="output-card" id="output-card">
-    <div class="output-header">
-      <h2>Email Draft</h2>
-      <span id="scenario-badge-header" style="display:none" class="scenario-badge">
-        <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-        <span id="badge-text"></span>
-      </span>
-    </div>
-    <div class="output-body" id="output-body">
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        <p>Select a region and scenario, fill in the details, then click <strong>Generate Email Draft</strong>.</p>
-      </div>
-    </div>
-  </div>
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
 
-</div>
-
-<script>
-// ── Region data ───────────────────────────────────────────────────
-const REGIONS = {
-  US: { name:'United States',  phone:'(877) 797-4743' },
-  DE: { name:'Germany',        phone:'+49(0)8938037726' },
-  AT: { name:'Austria',        phone:'+43(0)720115456' },
-  CH: { name:'Switzerland',    phone:'+41(0)435880565' },
-  NL: { name:'Netherlands',    phone:'+31(0)852082305' },
-  BE: { name:'Belgium',        phone:'+32(0)78482728' },
-  FR: { name:'France',         phone:'+33(0)970731076' },
-  LU: { name:'Luxembourg',     phone:'80085850' },
-  GB: { name:'United Kingdom', phone:'+44(0)3308088522' },
-  ES: { name:'Spain',          phone:'+34518880277' },
-};
-
-// ── Scenario metadata ─────────────────────────────────────────────
-const SCENARIOS = {
-  coo_normal:       { label:'COO Completed — System Normal',        subject: true },
-  coo_issue:        { label:'COO Completed — System Has Issues',     subject: true },
-  doc_name:         { label:'Docs Needed — Name Mismatch',           subject: false },
-  doc_address:      { label:'Docs Needed — Address Mismatch',        subject: false },
-  doc_name_address: { label:'Docs Needed — Name & Address Mismatch', subject: false },
-  doc_missing:      { label:'Docs Needed — Not Attached',            subject: false },
-  lease_denial:     { label:'Lease Site — Customer Denial',          subject: false },
-  already_owner:    { label:'Existing Owner / Already Owner',        subject: false },
-};
-
-// ── Field definitions per scenario ───────────────────────────────
-const FIELDS = {
-  coo_normal: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'system_name',   label:'System Name',           ph:'e.g. Smith Solar' },
-    { label:'New Owner Details', type:'section' },
-    { id:'new_name',      label:'New Owner Name',        ph:'Full name' },
-    { id:'new_email',     label:'New Owner Email',       ph:'email@example.com' },
-    { id:'new_address',   label:'New Owner Address',     ph:'Street, City, State ZIP' },
-    { label:'Service Contacts', type:'section' },
-    { id:'maintainer_name',  label:'Maintainer Name',   ph:'Company or person name' },
-    { id:'maintainer_phone', label:'Maintainer Phone',  ph:'+1 555 000 0000' },
-    { id:'installer_name',   label:'Installer Name',    ph:'Company or person name' },
-    { id:'installer_phone',  label:'Installer Phone',   ph:'+1 555 000 0000' },
-  ],
-  coo_issue: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'system_name',   label:'System Name',           ph:'e.g. Smith Solar' },
-    { label:'New Owner Details', type:'section' },
-    { id:'new_name',      label:'New Owner Name',        ph:'Full name' },
-    { id:'new_email',     label:'New Owner Email',       ph:'email@example.com' },
-    { id:'new_address',   label:'New Owner Address',     ph:'Street, City, State ZIP' },
-    { label:'Issue & Contacts', type:'section' },
-    { id:'issue_desc',    label:'Issue Description',     ph:'e.g. communication error on 3 microinverters', type:'textarea' },
-    { id:'maintainer_name',  label:'Maintainer Name',   ph:'Company or person name' },
-    { id:'maintainer_phone', label:'Maintainer Phone',  ph:'+1 555 000 0000' },
-    { id:'installer_name',   label:'Installer Name',    ph:'Company or person name' },
-    { id:'installer_phone',  label:'Installer Phone',   ph:'+1 555 000 0000' },
-  ],
-  doc_name: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
-  ],
-  doc_address: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
-  ],
-  doc_name_address: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
-  ],
-  doc_missing: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
-  ],
-  lease_denial: [
-    { id:'customer_name',  label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',        label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',    label:'Case Number',           ph:'e.g. 00123456' },
-    { id:'lease_company',  label:'Lease Company Name',    ph:'e.g. SunRun, Tesla Energy' },
-    { id:'refund_amount',  label:'Refund Amount',         ph:'e.g. $150.00' },
-  ],
-  already_owner: [
-    { id:'customer_name', label:'Customer Name (Dear…)', ph:'e.g. John Smith' },
-    { id:'site_id',       label:'Site ID',               ph:'e.g. 2564252' },
-    { id:'case_number',   label:'Case Number',           ph:'e.g. 00123456' },
-  ],
-};
-
-// ── Template builders ─────────────────────────────────────────────
-function v(id){ return (document.getElementById(id)||{}).value?.trim()||'['+id.replace(/_/g,' ').toUpperCase()+']'; }
-
-function getPhone(){
-  const r = document.getElementById('sel-region').value;
-  return r ? REGIONS[r].phone : '(877) 797-4743';
-}
-
-function docList(){
-  return `• Recent utility bill\n• Bank statement\n• Mortgage statement\n• Property tax receipt\n• Voter registration card\n• Insurance card\n• Driver's license`;
-}
-
-const TEMPLATES = {
-  coo_normal(){ const ph=getPhone(); return {
-    to:`New Owner — ${v('new_name')} <${v('new_email')}>`,
-    subject:`Enphase Update: Ownership Transfer (Site ID: ${v('site_id')})`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-This is regarding Site ID: ${v('site_id')} with the system name "${v('system_name')}". Ownership of the system has been successfully transferred to the new owner listed below. Please be assured that this transition was seamless and our commitment to uninterrupted, high quality service remains unchanged.
-
-New Owner Details:
-• Name: ${v('new_name')}
-• Email: ${v('new_email')}
-• Address: ${v('new_address')}
-
-You may update the system name via Menu > Account > My Information > System Name.
-
-You can access your system using:
-• Enphase App: https://enphase.com/en-in/homeowners/enphase-app
-• Enlighten Web Portal: https://enlighten.enphaseenergy.com/
-• How to Video: https://www.youtube.com/watch?v=ZAkoKI5rGvY
-
-A health scan performed today confirms that your system is fully operational. For future assistance, please contact your Maintainer (${v('maintainer_name')} at ${v('maintainer_phone')}), Installer (${v('installer_name')} at ${v('installer_phone')}), or Enphase Support at ${ph}.
-
-Thank you for choosing Enphase.
-
-Warm regards,
-Enphase Support Team`}},
-
-  coo_issue(){ const ph=getPhone(); return {
-    to:`New Owner — ${v('new_name')} <${v('new_email')}>`,
-    subject:`Enphase Update: Ownership Transfer (Site ID: ${v('site_id')})`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-This is regarding Site ID: ${v('site_id')}, with the system name "${v('system_name')}." The ownership of your system has been successfully transferred to the new owner listed below. Please be assured that this transition was completed smoothly, and our commitment to uninterrupted, high quality service remains unchanged.
-
-New Owner Details:
-• Name: ${v('new_name')}
-• Email: ${v('new_email')}
-• Address: ${v('new_address')}
-
-You may update the system name via Menu > Account > My Information > System Name.
-
-You can access your system using:
-• Enphase App: https://enphase.com/en-in/homeowners/enphase-app
-• Enlighten Web Portal: https://enlighten.enphaseenergy.com/
-• How to Video: https://www.youtube.com/watch?v=ZAkoKI5rGvY
-
-During the ownership update, a health scan indicated that the system requires troubleshooting for the ${v('issue_desc')} issue. Please contact your Maintainer (${v('maintainer_name')} at ${v('maintainer_phone')}) or Installer (${v('installer_name')} at ${v('installer_phone')}). Alternatively, you may reach Enphase Support at ${ph} for assistance.
-
-If you have any further questions, please visit https://enphase.com/support.
-
-Warm regards,
-Enphase Support Team`}},
-
-  doc_name(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the name provided in the request and the supporting ownership document.
-
-To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
-
-Please provide one of the following documents for verification:
-${docList()}
-
-Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
-
-Warm regards,
-Enphase Support Team`}},
-
-  doc_address(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the Address provided in the request and the supporting ownership document.
-
-To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
-
-Please provide one of the following documents for verification:
-${docList()}
-
-Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
-
-Warm regards,
-Enphase Support Team`}},
-
-  doc_name_address(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Upon review, we noticed a discrepancy between the Name along with Address provided in the request and the supporting ownership document.
-
-To proceed with the change of ownership, we kindly request that you share a valid document that clearly matches your name and the system address.
-
-Please provide one of the following documents for verification:
-${docList()}
-
-Kindly reply to this email with the updated document. If you have any questions or need further assistance, please feel free to reach out.
-
-Warm regards,
-Enphase Support Team`}},
-
-  doc_missing(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} as well as Case Number: ${v('case_number')}. To proceed, please provide a valid document that matches your name and the system address.
-
-Please provide one of the following documents for verification:
-${docList()}
-
-Kindly reply to this email with the updated document. Please feel free to contact us if you need any further assistance.
-
-Warm regards,
-Enphase Support Team`}},
-
-  lease_denial(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. Our records indicate that the system is currently under lease with ${v('lease_company')}.
-
-If the system is still under an active lease, please contact your lease owner for any further changes to the site. Based on your confirmation, we will initiate a refund of ${v('refund_amount')} within 5–7 business days.
-
-If the lease has been fully paid off, kindly share the lease completion or lease termination document so that we may proceed with the ownership update. Based on your response to this email, we will take further action on your request.
-
-Please reply to this email with the requested information. Let us know if you need any further assistance.
-
-Warm regards,
-Enphase Support Team`}},
-
-  already_owner(){ return {
-    to:`Requestor / Customer — ${v('customer_name')}`,
-    subject:`Re: Change of Ownership Request – Site ID: ${v('site_id')} | Case: ${v('case_number')}`,
-    body:`Dear ${v('customer_name')},
-
-Thank you for contacting Enphase.
-
-We have received the Change of Ownership request for Site ID: ${v('site_id')} and Case Number: ${v('case_number')}. As per our records, you are already the owner of this system. Therefore, there is no need to proceed with an ownership transfer.
-
-We will initiate a refund for the amount paid for the transfer request, which should be credited to your account within 5–7 business days.
-
-If you have any further questions, please reply to this email or visit https://enphase.com/support.
-
-Warm regards,
-Enphase Support Team`}},
-};
-
-// ── UI logic ──────────────────────────────────────────────────────
-function onRegionChange(){
-  const r = document.getElementById('sel-region').value;
-  const info = document.getElementById('region-info');
-  if(r && REGIONS[r]){
-    info.style.display='block';
-    info.innerHTML=`<strong>${REGIONS[r].name}</strong> — Support: ${REGIONS[r].phone}`;
-  } else {
-    info.style.display='none';
-  }
-}
-
-function onScenarioChange(){
-  const sc = document.getElementById('sel-scenario').value;
-  if(!sc) return;
-  const fields = FIELDS[sc] || [];
-  const container = document.getElementById('dynamic-fields');
-  let html='';
-  let inSection=false;
-  fields.forEach(f=>{
-    if(f.type==='section'){
-      if(inSection) html+='</div>';
-      html+=`<div class="field-section"><div class="field-section-title">${f.label}</div>`;
-      inSection=true;
-    } else if(f.type==='textarea'){
-      html+=`<div class="fg"><label for="${f.id}">${f.label}</label><textarea id="${f.id}" rows="2" placeholder="${f.ph}"></textarea></div>`;
-    } else {
-      html+=`<div class="fg"><label for="${f.id}">${f.label}</label><input id="${f.id}" placeholder="${f.ph}"></div>`;
-    }
-  });
-  if(inSection) html+='</div>';
-  container.innerHTML=html;
-  document.getElementById('fields-section').style.display='block';
-  // reset output
-  document.getElementById('output-body').innerHTML=`<div class="empty-state"><svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg><p>Fill in the fields above and click <strong>Generate Email Draft</strong>.</p></div>`;
-  document.getElementById('scenario-badge-header').style.display='none';
-}
-
-// Module-level storage — avoids embedding JSON inside HTML attributes
-let _currentSubject = '';
-let _currentBody    = '';
-
-function copySubject(){ copyText(_currentSubject, 'copy-subject'); }
-function copyBody(){    copyText(_currentBody,    'copy-body'); }
-
-function escHtml(str){
-  return str
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
-}
-
-function copyText(text, btnId){
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn=document.getElementById(btnId);
-    btn.classList.add('copied');
-    btn.innerHTML=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg> Copied!`;
-    setTimeout(()=>{
-      btn.classList.remove('copied');
-      btn.innerHTML=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
-    },2200);
-  });
-}
-
-function generateEmail(){
-  const sc = document.getElementById('sel-scenario').value;
-  const region = document.getElementById('sel-region').value;
-  if(!sc){ alert('Please select a scenario first.'); return; }
-  if(!region){ alert('Please select a region first.'); return; }
-
-  const result = TEMPLATES[sc]();
-  const scLabel = SCENARIOS[sc].label;
-
-  // Store in module vars — onclick handlers reference these, no JSON in attributes
-  _currentSubject = result.subject;
-  _currentBody    = result.body;
-
-  const copyIcon=`<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy`;
-
-  document.getElementById('output-body').innerHTML=`
-    <div class="to-row"><strong>Send To:</strong> &nbsp;${escHtml(result.to)}</div>
-
-    <div class="output-block">
-      <div class="output-block-header">
-        <span class="output-block-label">Subject</span>
-        <button class="copy-btn" id="copy-subject" onclick="copySubject()">${copyIcon}</button>
-      </div>
-      <div class="subject-box">${escHtml(result.subject)}</div>
-    </div>
-
-    <div class="output-block">
-      <div class="output-block-header">
-        <span class="output-block-label">Email Body</span>
-        <button class="copy-btn" id="copy-body" onclick="copyBody()">${copyIcon}</button>
-      </div>
-      <div class="body-box">${escHtml(result.body)}</div>
-    </div>
-  `;
-
-  const badge = document.getElementById('scenario-badge-header');
-  badge.style.display='inline-flex';
-  document.getElementById('badge-text').textContent=scLabel;
-}
-</script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

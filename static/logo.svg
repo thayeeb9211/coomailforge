@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <rect width="48" height="48" rx="11" fill="#F47920"/>
+  <!-- Envelope body -->
+  <rect x="7" y="15" width="34" height="22" rx="2.5" fill="white" fill-opacity="0.15" stroke="white" stroke-width="1.6"/>
+  <!-- Envelope flap V -->
+  <path d="M7 17.5L24 28L41 17.5" stroke="white" stroke-width="1.6" stroke-linejoin="round"/>
+  <!-- Lightning bolt (top-right) -->
+  <path d="M30 6l-3.5 7H30l-3.5 7.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
