@@ -9,18 +9,18 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, m
 import enphase_client
 import db_layer
 
-try:
-    import enlighten_scraper
-    SCRAPER_AVAILABLE = True
-except ImportError:
-    SCRAPER_AVAILABLE = False
-
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH  = os.path.join(DATA_DIR, "mailforge.db")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 db_layer.init(DB_PATH)
 CLOUD_MODE = db_layer.is_cloud()
+
+try:
+    import enlighten_scraper
+    SCRAPER_AVAILABLE = True and not CLOUD_MODE
+except ImportError:
+    SCRAPER_AVAILABLE = False
 
 REGIONS = [
     "US / NA",
@@ -289,6 +289,25 @@ def create_custom_template():
     }
     db_layer.save_template(new_tpl)
     return jsonify({"status": "success", "template": new_tpl})
+
+
+@app.route('/api/custom-templates/<template_id>', methods=['PUT'])
+def update_custom_template(template_id):
+    data = request.json or {}
+    if not data.get("label") or not data.get("body_template"):
+        return jsonify({"status": "error", "message": "label and body_template are required."}), 400
+    updated = {
+        "id": template_id,
+        "label": data["label"].strip(),
+        "to_template": data.get("to_template", "Recipient").strip(),
+        "cc": data.get("cc", ""),
+        "subject_template": data.get("subject_template", "").strip(),
+        "body_template": data["body_template"],
+        "created_at": data.get("created_at", datetime.now(timezone.utc).isoformat()),
+        "created_by": data.get("created_by", "")
+    }
+    db_layer.save_template(updated)
+    return jsonify({"status": "success", "template": updated})
 
 
 @app.route('/api/custom-templates/<template_id>', methods=['DELETE'])

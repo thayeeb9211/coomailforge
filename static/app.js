@@ -856,13 +856,18 @@ Enphase Support Team`
     try {
       const d = await (await fetch("/api/enlighten/check-session")).json();
       if (d.status === "active") {
-        setEnlStatus("ok","Session active");
+        setEnlStatus("ok", "Session active");
         dismissLoginWall();
+      } else if (d.status === "unavailable") {
+        setEnlStatus("no", "Scanner not available");
       } else {
-        setEnlStatus("no","Not logged in");
+        setEnlStatus("no", "Not logged in");
+        if (!d.has_file) {
+          setTimeout(() => startEnlightenLogin(true), 1000);
+        }
       }
     } catch {
-      setEnlStatus("no","Session check failed");
+      setEnlStatus("no", "Session check failed");
     }
   }
 
@@ -956,6 +961,21 @@ Enphase Support Team`
                .replace(/\[\[([^\]]+)\]\]/g,'<span class="placeholder-tag">[$1]</span>');
   }
 
+  function _customizeScenarioAsTemplate(scenario) {
+    const email = scenario.emails && scenario.emails[0];
+    const dummyF = {};
+    scenario.fields && scenario.fields.forEach(k => { dummyF[k] = `[[${FIELD_DEFS[k]?FIELD_DEFS[k].label:k}]]`; });
+    const bodyText  = email ? email.body(dummyF, "[[Agent Name]]") : "";
+    const subjText  = email ? email.subject(dummyF) : scenario.label;
+    openNewTemplateModal({
+      label:            `${scenario.label} (custom)`,
+      to_template:      email ? email.to : "Recipient",
+      cc:               email ? (email.cc || "") : "",
+      subject_template: subjText,
+      body_template:    bodyText
+    });
+  }
+
   function updatePreview(scenario, values) {
     draftsEl.innerHTML = "";
     if (scenario.emails.length === 0 && scenario.guidelines) {
@@ -984,6 +1004,7 @@ Enphase Support Team`
           <button class="btn btn-secondary btn-download">Download .txt</button>
           <button class="btn btn-success btn-log-case">Log This Case</button>
           <button class="btn btn-secondary btn-clear-fields">Clear Fields</button>
+          ${!scenario._isCustom ? `<button class="btn btn-secondary btn-customize" title="Save as editable custom template">✏ Customize</button>` : ""}
         </div>`;
       card.querySelector(".btn-copy-body").addEventListener("click", e => { navigator.clipboard.writeText(body).then(() => flashBtn(e.target,"✓ Copied!")); });
       card.querySelector(".btn-copy-full").addEventListener("click", e => { navigator.clipboard.writeText(`To: ${emailDef.to}\n${emailDef.cc?`Cc: ${emailDef.cc}\n`:""}Subject: ${subject}\n\n${body}`).then(() => flashBtn(e.target,"✓ Email Copied!")); });
@@ -994,6 +1015,8 @@ Enphase Support Team`
       });
       card.querySelector(".btn-log-case").addEventListener("click", () => logCase(scenario.id, scenario.category));
       card.querySelector(".btn-clear-fields").addEventListener("click", () => { state[scenario.id] = {}; saveState(); selectScenario(scenario.id); showToast("Fields cleared","info"); });
+      const custBtn = card.querySelector(".btn-customize");
+      if (custBtn) custBtn.addEventListener("click", () => _customizeScenarioAsTemplate(scenario));
       draftsEl.appendChild(card);
     });
   }
@@ -1098,6 +1121,7 @@ Enphase Support Team`
      ============================================================ */
   const CUSTOM_PREFIX = "custom-";
   let _customTemplates = [];
+  let _editingTemplateId = null;
 
   function parsePlaceholders(text) {
     const seen = [], re = /\[\[([^\]]+)\]\]/g;
@@ -1177,9 +1201,10 @@ Enphase Support Team`
     }
     templates.forEach(tpl => {
       const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-color)";
+      row.style.cssText = "display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border-color)";
       row.innerHTML = `
         <button style="flex:1;background:none;border:none;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-main);text-align:left;padding:0;font-family:var(--font-sans)" data-id="${CUSTOM_PREFIX + tpl.id}">${tpl.label}</button>
+        <button style="background:none;border:none;cursor:pointer;color:#64748b;font-size:13px;padding:2px 5px;border-radius:4px;line-height:1;border:1px solid #e2e8f0;flex-shrink:0" title="Edit template" data-edit-id="${tpl.id}">✏</button>
         <button style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:0;line-height:1;flex-shrink:0" title="Delete" data-del="${tpl.id}" data-label="${tpl.label}">&times;</button>
       `;
       row.querySelector("[data-id]").addEventListener("click", e => {
@@ -1189,6 +1214,7 @@ Enphase Support Team`
         document.getElementById("view-compose").classList.add("active");
         selectScenario(e.target.dataset.id);
       });
+      row.querySelector("[data-edit-id]").addEventListener("click", () => openEditTemplateModal(tpl));
       row.querySelector("[data-del]").addEventListener("click", e => {
         deleteCustomTemplate(e.currentTarget.dataset.del, e.currentTarget.dataset.label);
       });
@@ -1196,14 +1222,39 @@ Enphase Support Team`
     });
   }
 
-  function openNewTemplateModal() {
+  function openNewTemplateModal(prefill) {
+    _editingTemplateId = null;
+    const titleEl = document.getElementById("ctpl-modal-title");
+    if (titleEl) titleEl.textContent = "New Email Template";
     ["ctpl-label","ctpl-to","ctpl-cc","ctpl-subject","ctpl-body"].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = "";
     });
+    if (prefill) {
+      const s = typeof prefill === "string" ? prefill : null;
+      if (prefill.label)            { const e = document.getElementById("ctpl-label");   if(e) e.value = prefill.label; }
+      if (prefill.to_template)      { const e = document.getElementById("ctpl-to");     if(e) e.value = prefill.to_template; }
+      if (prefill.cc)               { const e = document.getElementById("ctpl-cc");     if(e) e.value = prefill.cc; }
+      if (prefill.subject_template) { const e = document.getElementById("ctpl-subject"); if(e) e.value = prefill.subject_template; }
+      if (prefill.body_template)    { const e = document.getElementById("ctpl-body");   if(e) e.value = prefill.body_template; }
+    }
+    document.getElementById("custom-tpl-modal").classList.remove("hidden");
+  }
+
+  function openEditTemplateModal(tpl) {
+    _editingTemplateId = tpl.id;
+    const titleEl = document.getElementById("ctpl-modal-title");
+    if (titleEl) titleEl.textContent = `Edit Template`;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ""; };
+    set("ctpl-label",   tpl.label);
+    set("ctpl-to",      tpl.to_template);
+    set("ctpl-cc",      tpl.cc);
+    set("ctpl-subject", tpl.subject_template);
+    set("ctpl-body",    tpl.body_template);
     document.getElementById("custom-tpl-modal").classList.remove("hidden");
   }
 
   function closeTemplateModal() {
+    _editingTemplateId = null;
     document.getElementById("custom-tpl-modal").classList.add("hidden");
   }
 
@@ -1216,16 +1267,17 @@ Enphase Support Team`
     if (!label)   { showToast("Template name is required", "error"); return; }
     if (!subject) { showToast("Subject line is required", "error");  return; }
     if (!body)    { showToast("Email body is required", "error");    return; }
+    const payload = { label, to_template: to || "Recipient", cc, subject_template: subject, body_template: body, created_by: agentUsername };
     try {
-      const res = await fetch("/api/custom-templates", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ label, to_template: to || "Recipient", cc, subject_template: subject, body_template: body, created_by: agentUsername })
-      });
+      const isEdit = !!_editingTemplateId;
+      const url    = isEdit ? `/api/custom-templates/${_editingTemplateId}` : "/api/custom-templates";
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error();
       closeTemplateModal();
-      showToast(`Template "${label}" saved`, "success");
+      showToast(isEdit ? `Template "${label}" updated` : `Template "${label}" saved`, "success");
       await loadAndInjectCustomTemplates();
+      if (isEdit) selectScenario(CUSTOM_PREFIX + _editingTemplateId);
     } catch { showToast("Failed to save template", "error"); }
   }
 
@@ -1314,13 +1366,14 @@ Enphase Support Team`
 
   document.addEventListener("DOMContentLoaded", initialize);
 
-  window.startEnlightenLogin   = startEnlightenLogin;
-  window.fetchFromEnlighten    = fetchFromEnlighten;
-  window.dismissLoginWall      = dismissLoginWall;
-  window.openNewTemplateModal  = openNewTemplateModal;
-  window.closeTemplateModal    = closeTemplateModal;
-  window.submitCustomTemplate  = submitCustomTemplate;
-  window.downloadChart         = downloadChart;
+  window.startEnlightenLogin    = startEnlightenLogin;
+  window.fetchFromEnlighten     = fetchFromEnlighten;
+  window.dismissLoginWall       = dismissLoginWall;
+  window.openNewTemplateModal   = openNewTemplateModal;
+  window.openEditTemplateModal  = openEditTemplateModal;
+  window.closeTemplateModal     = closeTemplateModal;
+  window.submitCustomTemplate   = submitCustomTemplate;
+  window.downloadChart          = downloadChart;
 
   /* inject btn-chart-dl style */
   const _s = document.createElement("style");
