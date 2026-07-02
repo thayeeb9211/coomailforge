@@ -69,4 +69,22 @@ if __name__ == "__main__":
         print()
         threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
 
-    serve(app, host=HOST, port=PORT, threads=16)
+    try:
+        serve(app, host=HOST, port=PORT, threads=16)
+    except OSError as e:
+        print()
+        print(f"  ERROR: Could not bind to port {PORT}: {e}")
+        print("  Another process may still own that port.")
+        print("  Run STOP SERVER.bat, then try again.")
+        print()
+        input("  Press Enter to exit...")
+    except KeyboardInterrupt:
+        print()
+        print("  Server stopped by user (Ctrl+C).")
+    except Exception as e:
+        print()
+        print(f"  UNEXPECTED ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        print()
+        input("  Press Enter to exit...")
