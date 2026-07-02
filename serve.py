@@ -7,6 +7,8 @@ import socket
 import threading
 import webbrowser
 
+PREFERRED_PORTS = [5001, 5002, 5003, 5004, 5005]
+
 def get_lan_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -17,10 +19,21 @@ def get_lan_ip():
     except Exception:
         return "localhost"
 
+def find_free_port(ports):
+    """Try each port in order; return the first one not already in use."""
+    for p in ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind(("0.0.0.0", p))
+                return p
+        except OSError:
+            print(f"  Port {p} is busy — trying next…")
+    raise RuntimeError(f"None of the ports {ports} are available. Free one and retry.")
+
 HOST     = "0.0.0.0"
-PORT     = int(os.environ.get("PORT", 5001))
 LAN_IP   = get_lan_ip()
-IS_CLOUD = "PORT" in os.environ and os.environ.get("FIREBASE_CREDENTIALS")
+IS_CLOUD = bool(os.environ.get("FIREBASE_CREDENTIALS")) and "PORT" in os.environ
 
 if __name__ == "__main__":
     try:
@@ -33,21 +46,27 @@ if __name__ == "__main__":
     from app import app
 
     if IS_CLOUD:
-        print("=" * 58)
+        PORT = int(os.environ.get("PORT", 5001))
+        print("=" * 62)
         print("  COO Mail Forge  —  Cloud Mode (Render)")
-        print("=" * 58)
+        print("=" * 62)
         print(f"  Listening on port {PORT}")
-        print("=" * 58)
+        print("=" * 62)
     else:
-        print("=" * 58)
+        PORT = find_free_port(PREFERRED_PORTS)
+        print()
+        print("=" * 62)
         print("  COO Mail Forge  —  Local / Intranet Mode")
-        print("=" * 58)
-        print(f"  Local:    http://localhost:{PORT}")
-        print(f"  Network:  http://{LAN_IP}:{PORT}   ← share with team")
-        print("=" * 58)
-        print("  Send the Network URL to your COO agents and manager.")
+        print("=" * 62)
+        print(f"  Your PC:   http://localhost:{PORT}")
+        print(f"  Agents:    http://{LAN_IP}:{PORT}")
+        print(f"  Manager:   http://{LAN_IP}:{PORT}/admin")
+        print("=" * 62)
+        print("  Share the AGENTS link with COO staff.")
+        print("  Share the MANAGER link with your supervisor.")
         print("  Press Ctrl+C to stop the server.")
-        print("=" * 58)
+        print("=" * 62)
+        print()
         threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
 
     serve(app, host=HOST, port=PORT, threads=16)
