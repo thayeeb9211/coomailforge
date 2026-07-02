@@ -1,6 +1,7 @@
 # Secrets — never commit credentials or session cookies
 config.json
 enlighten_session.json
+firebase-credentials.json
 
 # Python
 __pycache__/

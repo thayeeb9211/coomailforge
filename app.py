@@ -4,9 +4,10 @@ import json
 import uuid
 import webbrowser
 from datetime import datetime, timezone, timedelta
-import csv, io, sqlite3
+import csv, io
 from flask import Flask, request, jsonify, render_template, redirect, url_for, make_response
 import enphase_client
+import db_layer
 
 try:
     import enlighten_scraper
@@ -14,79 +15,18 @@ try:
 except ImportError:
     SCRAPER_AVAILABLE = False
 
-CUSTOM_TEMPLATES_FILE = os.path.join(os.path.dirname(__file__), "custom_templates.json")
-
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 DB_PATH  = os.path.join(DATA_DIR, "mailforge.db")
 os.makedirs(DATA_DIR, exist_ok=True)
 
-def _get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def _init_db():
-    with _get_db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS cases (
-                id       TEXT PRIMARY KEY,
-                scenario TEXT NOT NULL,
-                region   TEXT NOT NULL DEFAULT 'Other / Unspecified',
-                category TEXT NOT NULL DEFAULT 'Other',
-                at       TEXT NOT NULL
-            )
-        """)
-        conn.commit()
-    # One-time migration from cases.json if it exists
-    _legacy = os.path.join(DATA_DIR, "cases.json")
-    if os.path.exists(_legacy):
-        try:
-            with open(_legacy, "r") as _f:
-                _old = json.load(_f)
-            if _old:
-                with _get_db() as conn:
-                    for c in _old:
-                        conn.execute(
-                            "INSERT OR IGNORE INTO cases (id,scenario,region,category,at) VALUES (?,?,?,?,?)",
-                            (c.get('id', str(uuid.uuid4())), c.get('scenario',''),
-                             c.get('region','Other / Unspecified'), c.get('category','Other'),
-                             c.get('at',''))
-                        )
-                    conn.commit()
-        except Exception:
-            pass
-        os.rename(_legacy, _legacy + ".migrated")
-
-_init_db()
+db_layer.init(DB_PATH)
+CLOUD_MODE = db_layer.is_cloud()
 
 REGIONS = [
     "US / NA",
     "Germany", "Austria", "Switzerland", "Netherlands", "Belgium",
     "France", "Luxembourg", "UK", "Spain", "Other / Unspecified"
 ]
-
-def _read_cases():
-    try:
-        with _get_db() as conn:
-            rows = conn.execute(
-                "SELECT id,scenario,region,category,at FROM cases ORDER BY at"
-            ).fetchall()
-            return [dict(r) for r in rows]
-    except Exception:
-        return []
-
-def _load_custom_templates():
-    if os.path.exists(CUSTOM_TEMPLATES_FILE):
-        try:
-            with open(CUSTOM_TEMPLATES_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
-
-def _save_custom_templates(templates):
-    with open(CUSTOM_TEMPLATES_FILE, "w") as f:
-        json.dump(templates, f, indent=2)
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
@@ -329,7 +269,7 @@ def enlighten_clear_session():
 
 @app.route('/api/custom-templates', methods=['GET'])
 def get_custom_templates():
-    return jsonify(_load_custom_templates())
+    return jsonify(db_layer.read_templates())
 
 
 @app.route('/api/custom-templates', methods=['POST'])
@@ -337,27 +277,23 @@ def create_custom_template():
     data = request.json or {}
     if not data.get("label") or not data.get("body_template"):
         return jsonify({"status": "error", "message": "label and body_template are required."}), 400
-    templates = _load_custom_templates()
     new_tpl = {
         "id": str(uuid.uuid4()),
         "label": data["label"].strip(),
-        "to_template": data.get("to_template", "Customer \u2014 {{customer_name}}").strip(),
+        "to_template": data.get("to_template", "Recipient").strip(),
+        "cc": data.get("cc", ""),
         "subject_template": data.get("subject_template", "").strip(),
         "body_template": data["body_template"],
-        "fields": data.get("fields", []),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": data.get("created_by", "")
     }
-    templates.append(new_tpl)
-    _save_custom_templates(templates)
+    db_layer.save_template(new_tpl)
     return jsonify({"status": "success", "template": new_tpl})
 
 
 @app.route('/api/custom-templates/<template_id>', methods=['DELETE'])
 def delete_custom_template(template_id):
-    templates = _load_custom_templates()
-    templates = [t for t in templates if t["id"] != template_id]
-    _save_custom_templates(templates)
+    db_layer.delete_template(template_id)
     return jsonify({"status": "success"})
 
 
@@ -385,20 +321,13 @@ def log_case():
         'category': category,
         'at':       datetime.utcnow().isoformat() + 'Z'
     }
-    with _get_db() as conn:
-        conn.execute(
-            "INSERT INTO cases (id,scenario,region,category,at) VALUES (?,?,?,?,?)",
-            (entry['id'], entry['scenario'], entry['region'], entry['category'], entry['at'])
-        )
-        conn.commit()
+    db_layer.insert_case(entry)
     return jsonify(entry), 201
 
 
 @app.route('/api/cases/clear', methods=['POST'])
 def clear_cases():
-    with _get_db() as conn:
-        conn.execute("DELETE FROM cases")
-        conn.commit()
+    db_layer.clear_cases()
     return jsonify({'status': 'success', 'message': 'All analytics data cleared.'})
 
 
@@ -417,7 +346,7 @@ def _bucket_key(dt_str, gran):
 
 @app.route('/api/analytics')
 def get_analytics():
-    cases = _read_cases()
+    cases = db_layer.read_cases()
     by_region   = {r: 0 for r in REGIONS}
     by_category = {'COO': 0, 'DOO': 0, 'Other': 0}
     by_scenario = {}
@@ -457,7 +386,7 @@ def get_analytics():
 
 @app.route('/api/analytics/export')
 def export_analytics_csv():
-    cases = _read_cases()
+    cases = db_layer.read_cases()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['ID', 'Scenario', 'Category', 'Region', 'Logged At (UTC)'])
@@ -475,9 +404,10 @@ def export_analytics_csv():
 
 @app.route('/admin')
 def admin_dashboard():
-    cases   = _read_cases()
+    cases   = db_layer.read_cases()
     db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
-    custom  = _load_custom_templates()
+    custom  = db_layer.read_templates()
+    mode    = "☁️ Firebase Firestore (Cloud)" if CLOUD_MODE else "🗄️ SQLite (Local)"
     recent  = list(reversed(cases))[:100]
     rows_html = ""
     for c in recent:
