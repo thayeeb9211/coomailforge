@@ -953,12 +953,25 @@ Enphase Support Team`
     });
     applyLastScanToFields(scenario.fields, values, scenario);
     updatePreview(scenario, values);
+    const custBtn = document.getElementById("btn-customize-scenario");
+    if (custBtn) custBtn.innerHTML = scenario._isCustom ? "&#9998; Edit Template" : "&#9998; Customize";
   }
 
   function highlightPlaceholders(text) {
     if (!text) return "";
     return text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
                .replace(/\[\[([^\]]+)\]\]/g,'<span class="placeholder-tag">[$1]</span>');
+  }
+
+  function customizeCurrentScenario() {
+    const scenario = SCENARIOS.find(s => s.id === currentScenarioId);
+    if (!scenario) return;
+    if (scenario._isCustom) {
+      const tpl = _customTemplates.find(t => t.id === scenario._templateId);
+      if (tpl) openEditTemplateModal(tpl);
+    } else {
+      _customizeScenarioAsTemplate(scenario);
+    }
   }
 
   function _customizeScenarioAsTemplate(scenario) {
@@ -1366,14 +1379,15 @@ Enphase Support Team`
 
   document.addEventListener("DOMContentLoaded", initialize);
 
-  window.startEnlightenLogin    = startEnlightenLogin;
-  window.fetchFromEnlighten     = fetchFromEnlighten;
-  window.dismissLoginWall       = dismissLoginWall;
-  window.openNewTemplateModal   = openNewTemplateModal;
-  window.openEditTemplateModal  = openEditTemplateModal;
-  window.closeTemplateModal     = closeTemplateModal;
-  window.submitCustomTemplate   = submitCustomTemplate;
-  window.downloadChart          = downloadChart;
+  window.startEnlightenLogin      = startEnlightenLogin;
+  window.fetchFromEnlighten        = fetchFromEnlighten;
+  window.dismissLoginWall          = dismissLoginWall;
+  window.openNewTemplateModal      = openNewTemplateModal;
+  window.openEditTemplateModal     = openEditTemplateModal;
+  window.closeTemplateModal        = closeTemplateModal;
+  window.submitCustomTemplate      = submitCustomTemplate;
+  window.downloadChart             = downloadChart;
+  window.customizeCurrentScenario  = customizeCurrentScenario;
 
   /* inject btn-chart-dl style */
   const _s = document.createElement("style");

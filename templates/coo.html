@@ -163,7 +163,8 @@
         <header class="view-header scenario-selection-header">
           <div class="selector-container">
             <label for="scenario-select" class="dropdown-label">Active Scenario Workflow</label>
-            <select id="scenario-select" class="form-control select-scenario-dropdown">
+            <div style="display:flex;gap:8px;align-items:center">
+            <select id="scenario-select" class="form-control select-scenario-dropdown" style="flex:1">
               <optgroup label="Change of Ownership (COO) Templates">
                 <option value="coo-normal" selected>COO Complete — System Normal</option>
                 <option value="coo-not-normal">COO Complete — System Has Issue</option>
@@ -188,6 +189,8 @@
                 <option value="admin-other-scenarios">Other Scenarios (Host, Builders, etc.)</option>
               </optgroup>
             </select>
+            <button id="btn-customize-scenario" onclick="customizeCurrentScenario()" title="Edit or clone this scenario as a custom template" style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:8px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;font-family:var(--font-sans)">&#9998; Customize</button>
+            </div>
           </div>
           <div class="scenario-details-bubble">
             <div class="badge coo" id="scenario-badge">Change of Ownership</div>
