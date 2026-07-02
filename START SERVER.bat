@@ -3,6 +3,7 @@ title COO Mail Forge — Server
 cd /d "%~dp0"
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
+set PYTHONUNBUFFERED=1
 
 echo.
 echo  =========================================

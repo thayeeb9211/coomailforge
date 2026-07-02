@@ -12,10 +12,10 @@ powershell -NoProfile -Command ^
   "foreach ($p in $ports) {" ^
   "  $conns = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue;" ^
   "  if ($conns) {" ^
-  "    $pids = $conns.OwningProcess | Sort-Object -Unique;" ^
-  "    foreach ($pid in $pids) {" ^
-  "      Write-Host ('  Port ' + $p + '  [PID ' + $pid + ']  stopping...');" ^
-  "      Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue;" ^
+  "    $procIds = $conns.OwningProcess | Sort-Object -Unique;" ^
+  "    foreach ($procId in $procIds) {" ^
+  "      Write-Host ('  Port ' + $p + '  [PID ' + $procId + ']  stopping...');" ^
+  "      Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue;" ^
   "    }" ^
   "    Write-Host '  Done.';" ^
   "    $stopped = $true;" ^
