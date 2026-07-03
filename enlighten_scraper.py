@@ -6,6 +6,7 @@ Step 2: Session cookies are saved to disk.
 Step 3: httpx reuses those cookies to fetch Enlighten admin pages.
 Step 4: BeautifulSoup parses the HTML to extract site data.
 """
+import base64
 import concurrent.futures
 import csv
 import io
@@ -26,6 +27,11 @@ _login_status = "idle"   # idle | waiting | success | timeout | error:<msg>
 _login_lock = threading.Lock()
 _last_error = ""   # human-readable detail exposed via /api/enlighten/login-status
 
+_sf_driver = None
+_sf_login_status = "idle"
+_sf_login_lock = threading.Lock()
+_sf_last_error = ""
+
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -42,6 +48,9 @@ _HEADERS = {
 def get_status():
     return {"status": _login_status, "detail": _last_error}
 
+def get_salesforce_status():
+    return {"status": _sf_login_status, "detail": _sf_last_error}
+
 
 def start_login():
     """Launch Selenium in a background thread so Flask doesn't block."""
@@ -52,6 +61,18 @@ def start_login():
         _login_status = "waiting"
         _last_error = ""
     t = threading.Thread(target=_login_worker, daemon=True)
+    t.start()
+
+
+def start_salesforce_login():
+    """Launch Selenium for Salesforce login in a background thread."""
+    global _sf_login_status, _sf_last_error
+    with _sf_login_lock:
+        if _sf_login_status == "waiting":
+            return
+        _sf_login_status = "waiting"
+        _sf_last_error = ""
+    t = threading.Thread(target=_sf_login_worker, daemon=True)
     t.start()
 
 
@@ -128,6 +149,46 @@ def _login_worker():
             except Exception:
                 pass
             _driver = None
+
+
+def _sf_login_worker():
+    global _sf_driver, _sf_login_status, _sf_last_error
+    try:
+        _sf_driver, browser = _open_browser()
+        _sf_driver.get("https://enphase.lightning.force.com/")
+
+        deadline = time.time() + 300   # 5-minute window for user to log in
+        while time.time() < deadline:
+            time.sleep(2)
+            try:
+                url = _sf_driver.current_url
+            except Exception:
+                break
+            # Once past all login/auth pages the dashboard URL won't contain these
+            if not any(x in url for x in ["login", "signin", "auth", "oauth", "accounts"]):
+                cookies = _sf_driver.get_cookies()
+                _save_salesforce_session(cookies)
+                _sf_login_status = "success"
+                try:
+                    _sf_driver.quit()
+                except Exception:
+                    pass
+                _sf_driver = None
+                return
+
+        _sf_login_status = "timeout"
+        _sf_last_error = "5-minute window expired without a successful login."
+
+    except Exception as exc:
+        _sf_login_status = "error"
+        _sf_last_error = str(exc)
+    finally:
+        if _sf_driver:
+            try:
+                _sf_driver.quit()
+            except Exception:
+                pass
+            _sf_driver = None
 
 
 # ── Session helpers ───────────────────────────────────────────────
@@ -246,6 +307,18 @@ def fetch_site(site_id):
         csrf_tok  = csrf_el["content"] if csrf_el else ""
         h1        = main_soup.find("h1")
 
+        # Extract owner name from main page
+        owner_name = ""
+        for label in main_soup.find_all("label"):
+            label_text = label.get_text(strip=True).lower()
+            if "owner" in label_text:
+                parent = label.parent
+                if parent:
+                    val_div = parent.find_next_sibling("div")
+                    if val_div:
+                        owner_name = val_div.get_text(strip=True).split("(")[0].strip()
+                        break
+
         ajax_hdrs = {
             "X-Requested-With": "XMLHttpRequest",
             "Accept":           "text/html, */*; q=0.01",
@@ -257,6 +330,7 @@ def fetch_site(site_id):
         data = {
             "site_id":               str(site_id),
             "system_name":           h1.get_text(strip=True) if h1 else f"Site {site_id}",
+            "owner_name":            owner_name,
             "address":               "",
             "installer_name":        "",
             "installer_phone":       "",
@@ -623,3 +697,129 @@ def _parse_standing_alarms_csv(text):
         pass
     out["alarm_count"] = len(out["alarms"])
     return out
+
+
+# ── Salesforce Case Scraper ─────────────────────────────────────
+
+SALESFORCE_SESSION_FILE = os.path.join(os.path.dirname(__file__), "salesforce_session.json")
+
+def _load_salesforce_session():
+    if not os.path.exists(SALESFORCE_SESSION_FILE):
+        return None
+    try:
+        with open(SALESFORCE_SESSION_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _save_salesforce_session(cookies):
+    with open(SALESFORCE_SESSION_FILE, "w") as f:
+        json.dump(cookies, f, indent=2)
+
+def has_salesforce_session():
+    return os.path.exists(SALESFORCE_SESSION_FILE)
+
+def clear_salesforce_session():
+    if os.path.exists(SALESFORCE_SESSION_FILE):
+        os.remove(SALESFORCE_SESSION_FILE)
+
+def fetch_salesforce_case(case_number):
+    """
+    Fetch Salesforce case details using the case number.
+    This requires the user to be logged into Salesforce.
+    Returns case data including contact name, contact email, and site ID.
+    """
+    cookies = _load_salesforce_session()
+    if not cookies:
+        raise ValueError("No saved Salesforce session. Please log in to Salesforce first.")
+
+    cookie_dict = _as_dict(cookies)
+    
+    # Build the Salesforce search URL
+    to_encode = {
+        "componentDef": "forceSearch:searchPageDesktop",
+        "attributes": {
+            "term": case_number,
+            "scopeMap": {
+                "nameField": "Name",
+                "name": "Case",
+                "id": "Case",
+                "label": "Cases",
+                "fields": "CaseNumber"
+            }
+        },
+        "state": {}
+    }
+    
+    encoded_hash = base64.b64encode(json.dumps(to_encode).encode()).decode()
+    search_url = f"https://enphase.lightning.force.com/one/one.app#{encoded_hash}"
+    
+    client = httpx.Client(
+        cookies=cookie_dict,
+        headers=_HEADERS,
+        follow_redirects=True,
+        timeout=15,
+    )
+    
+    try:
+        # Fetch the case page
+        r = client.get(search_url)
+        if r.status_code != 200:
+            raise ValueError(f"HTTP {r.status_code} fetching Salesforce case")
+        
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        # Extract case details from the page
+        data = {
+            "case_number": case_number,
+            "contact_name": "",
+            "contact_email": "",
+            "site_id": "",
+            "customer_name": "",
+        }
+        
+        # Try to find contact name
+        for label in soup.find_all("label"):
+            label_text = label.get_text(strip=True).lower()
+            if "contact" in label_text and "name" in label_text:
+                parent = label.parent
+                if parent:
+                    val_div = parent.find_next_sibling("div")
+                    if val_div:
+                        data["contact_name"] = val_div.get_text(strip=True)
+                        break
+        
+        # Try to find contact email
+        for label in soup.find_all("label"):
+            label_text = label.get_text(strip=True).lower()
+            if "contact" in label_text and "email" in label_text:
+                parent = label.parent
+                if parent:
+                    val_div = parent.find_next_sibling("div")
+                    if val_div:
+                        data["contact_email"] = val_div.get_text(strip=True)
+                        break
+        
+        # Try to find site ID
+        for label in soup.find_all("label"):
+            label_text = label.get_text(strip=True).lower()
+            if "site" in label_text and "id" in label_text:
+                parent = label.parent
+                if parent:
+                    val_div = parent.find_next_sibling("div")
+                    if val_div:
+                        site_text = val_div.get_text(strip=True)
+                        # Extract numeric site ID
+                        site_match = re.search(r'\d+', site_text)
+                        if site_match:
+                            data["site_id"] = site_match.group()
+                        break
+        
+        # Map contact name to customer name
+        if data["contact_name"]:
+            data["customer_name"] = data["contact_name"]
+        
+        return data
+        
+    finally:
+        client.close()

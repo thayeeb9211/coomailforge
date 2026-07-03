@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="alternate icon" href="/static/favicon.ico" sizes="any">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -118,6 +117,44 @@
     </div>
   </div>
 
+  <!-- Role Selector Overlay -->
+  <div id="role-overlay" class="role-overlay">
+    <div class="role-overlay-inner">
+      <div class="role-overlay-header">
+        <img src="/static/logo.svg" alt="COO Mail Forge" style="width:56px;height:56px;border-radius:14px;margin-bottom:14px">
+        <h1 style="font-size:26px;font-weight:800;color:var(--text-main);letter-spacing:-.03em;margin:0 0 6px">COO Mail Forge</h1>
+        <p style="font-size:14px;color:var(--text-muted);margin:0">Select your role to load the right email templates</p>
+      </div>
+      <div class="role-cards-row">
+        <div class="role-card" onclick="selectRole('normal')">
+          <div style="font-size:34px;margin-bottom:12px">&#128100;</div>
+          <h2 class="role-card-title">Normal COO / DOO User</h2>
+          <p class="role-card-desc">For agents escalating ownership transfer requests. Includes DOO form emails, misconfigured site fixes, payment escalations, and admin checklists.</p>
+          <div class="role-card-tags">
+            <span class="role-tag">Lease &rarr; Residential</span>
+            <span class="role-tag">Misconfigured Sites</span>
+            <span class="role-tag">Payment Issues</span>
+            <span class="role-tag">DOO Escalations</span>
+          </div>
+          <button class="role-select-btn">Select this Role</button>
+        </div>
+        <div class="role-card role-card-team" onclick="selectRole('team')">
+          <div style="font-size:34px;margin-bottom:12px">&#127970;</div>
+          <h2 class="role-card-title">COO Team Member</h2>
+          <p class="role-card-desc">For agents on the COO processing team. Includes transfer confirmations, document requests, lease denials, and exception handling.</p>
+          <div class="role-card-tags">
+            <span class="role-tag team">Transfer Confirmations</span>
+            <span class="role-tag team">Document Requests</span>
+            <span class="role-tag team">Lease Denials</span>
+            <span class="role-tag team">Exception Cases</span>
+          </div>
+          <button class="role-select-btn team">Select this Role</button>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:12px;color:var(--text-light);margin-top:18px">You can switch roles anytime from the sidebar.</p>
+    </div>
+  </div>
+
   <div class="app-layout">
 
     <!-- ═══ Sidebar ═══════════════════════════════════════════ -->
@@ -138,23 +175,18 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           Compose
         </button>
-        <button class="nav-tab" data-tab="analytics">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Analytics
+      </div>
+      <!-- Role Indicator -->
+      <div id="role-indicator" style="margin:0 16px 4px;display:none">
+        <button class="role-indicator-btn" onclick="showRoleSelector()" id="role-indicator-btn" title="Switch role">
+          <span class="role-dot" id="role-dot"></span>
+          <span id="role-indicator-label">Normal User</span>
+          <span style="margin-left:auto;font-size:10px;opacity:.6">&#8645; Switch</span>
         </button>
       </div>
 
       <!-- Sidebar Body -->
       <div class="sidebar-body">
-
-        <!-- Agent Signature -->
-        <div class="sidebar-card">
-          <h4 class="sidebar-card-title">Agent Signature</h4>
-          <p class="sidebar-card-desc">Your name is automatically added to every generated email template.</p>
-          <div class="form-group" style="margin-top:10px">
-            <input type="text" id="sidebar-username-input" class="form-control sidebar-input" placeholder="Support Agent">
-          </div>
-        </div>
 
         <!-- Enlighten Site Scanner -->
         <div class="sidebar-card enl-card">
@@ -162,19 +194,31 @@
             <h4 class="sidebar-card-title">Enlighten Scanner</h4>
             <span class="pill-badge">Live</span>
           </div>
-          <p class="sidebar-card-desc">Scan any site to auto-fill installer details, contacts, and alarm status into your email template.</p>
 
-          <div class="enl-session-row">
-            <span class="enl-dot no" id="enl-dot"></span>
-            <span class="enl-session-label" id="enl-session-label">Checking session…</span>
+          <!-- Session status + login — shown first -->
+          <div class="session-status-block">
+            <div class="session-row-combined">
+              <span class="enl-dot no" id="enl-dot"></span>
+              <span class="session-label-text" id="enl-session-label">Checking session…</span>
+              <button class="btn-session-login" id="enl-login-btn" onclick="startEnlightenLogin(false)">Login</button>
+            </div>
+            <div class="session-row-combined">
+              <span class="enl-dot no" id="sf-dot"></span>
+              <span class="session-label-text" id="sf-session-label">Salesforce: checking…</span>
+              <button class="btn-session-login sf" id="sf-login-btn" onclick="startSalesforceLogin()">Login</button>
+            </div>
           </div>
 
+          <!-- Scan inputs -->
           <div class="enl-site-row">
-            <input type="text" id="enl-site-id" class="form-control" placeholder="Site ID e.g. 6340828" inputmode="numeric">
+            <input type="text" id="enl-site-id" class="form-control" placeholder="Site ID e.g. 6340828" inputmode="numeric" autocomplete="off">
             <button class="btn-enl-scan" id="enl-fetch-btn" onclick="fetchFromEnlighten()">Scan Site</button>
           </div>
 
-          <button class="btn-enl-login" id="enl-login-btn" onclick="startEnlightenLogin(false)">Login to Enlighten</button>
+          <div class="enl-case-row">
+            <input type="text" id="enl-case-number" class="form-control" placeholder="Case # e.g. 20114033" inputmode="numeric" autocomplete="off">
+            <button class="btn-enl-scan" id="enl-fetch-case-btn" onclick="fetchFromSalesforce()">Fetch Case</button>
+          </div>
         </div>
 
         <!-- My Custom Templates -->
@@ -192,6 +236,7 @@
       <!-- Footer -->
       <div class="sidebar-footer">
         <span class="version-text">v3.0.0 Stable</span>
+        <button onclick="checkForUpdates()" title="Check for git updates" style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-muted);padding:0;font-family:var(--font-sans);display:inline-flex;align-items:center;gap:3px">&#8635; Updates</button>
         <button onclick="openFeatureRequestModal()" title="Request a new feature or report a bug" style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-muted);padding:0;font-family:var(--font-sans);display:inline-flex;align-items:center;gap:3px">&#128161; Request</button>
         <span class="status-indicator-wrapper">
           <span class="status-dot online" id="status-dot"></span>
@@ -212,7 +257,7 @@
             <label for="scenario-select" class="dropdown-label">Active Scenario Workflow</label>
             <div style="display:flex;gap:8px;align-items:center">
             <select id="scenario-select" class="form-control select-scenario-dropdown" style="flex:1">
-              <optgroup label="Change of Ownership (COO) Templates">
+              <optgroup label="Change of Ownership (COO) Templates" data-role="team">
                 <option value="coo-normal" selected>COO Complete — System Normal</option>
                 <option value="coo-not-normal">COO Complete — System Has Issue</option>
                 <option value="coo-name-mismatch">Document Request — Name Mismatch</option>
@@ -221,19 +266,18 @@
                 <option value="coo-docs-missing">Document Request — Documents Not Attached</option>
                 <option value="coo-lease-denial">Document Request — Lease Site Denial</option>
                 <option value="coo-existing-owner">Document Request — Requester Already Owner</option>
-                <option value="coo-exceptions">Exceptions (Death / Divorce / Family)</option>
-                <option value="coo-standard-steps">Standard Transfer Next Steps</option>
               </optgroup>
-              <optgroup label="Declaration of Ownership (DOO) Templates">
+              <optgroup label="Declaration of Ownership (DOO) Templates" data-role="normal">
                 <option value="doo-lease-a-to-b">Lease A to Lease B</option>
                 <option value="doo-lease-to-resi">Lease/PPA to Residential</option>
                 <option value="doo-misconfig-resi-lease">Misconfig: Resi tagged as Lease</option>
                 <option value="doo-misconfig-lease-resi">Misconfig: Lease tagged as Resi</option>
+                <option value="doo-exceptions">Exception Case (Death / Divorce / Family)</option>
+                <option value="doo-standard-steps">Standard Transfer Next Steps</option>
               </optgroup>
-              <optgroup label="Guidelines &amp; Administrative Checklists">
+              <optgroup label="Guidelines &amp; Administrative Checklists" data-role="normal">
                 <option value="admin-sold-remove">Sold System — Remove Owner</option>
                 <option value="admin-payment-issues">Payment Issues (COO/DOO)</option>
-                <option value="admin-other-scenarios">Other Scenarios (Host, Builders, etc.)</option>
               </optgroup>
             </select>
             <button id="btn-customize-scenario" onclick="customizeCurrentScenario()" title="Edit or clone this scenario as a custom template" style="flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:8px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;font-family:var(--font-sans)">&#9998; Customize</button>
@@ -258,8 +302,12 @@
             </div>
             <div class="form-body">
               <div class="form-group">
-                <label for="region-select">Region <span class="hint">(logged with analytics)</span></label>
-                <select id="region-select" class="form-control"></select>
+                <label for="region-select">Region</label>
+                <select id="region-select" class="form-control" autocomplete="off"></select>
+              </div>
+              <div class="form-group">
+                <label for="global-case-number">Case Number</label>
+                <input type="text" id="global-case-number" class="form-control" placeholder="e.g. 20114033" autocomplete="off" spellcheck="false" style="font-family:var(--font-mono);font-weight:700;letter-spacing:.03em">
               </div>
               <div id="dynamic-form-fields"></div>
             </div>
@@ -272,104 +320,17 @@
                 <h3 class="preview-title">Draft Preview</h3>
                 <span class="preview-subtitle">Check the details before copying.</span>
               </div>
+              <div id="active-case-badge" style="display:none;align-items:center;gap:8px;padding:7px 14px;background:linear-gradient(135deg,#eff6ff,#e0f2fe);border:1px solid #bae6fd;border-radius:8px;margin-bottom:12px">
+                <span style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em">Active Case</span>
+                <code id="active-case-display" style="font-size:13px;font-weight:800;color:#0c4a6e;background:#fff;border:1px solid #bae6fd;border-radius:5px;padding:2px 8px;letter-spacing:.04em">—</code>
+                <button onclick="clearCaseNumber()" title="Clear case number" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:14px;color:#94a3b8;line-height:1;padding:0">&times;</button>
+              </div>
               <div class="email-drafts-container" id="email-drafts-container"></div>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ── ANALYTICS TAB ───────────────────────────────────── -->
-      <section class="tab-view" id="view-analytics">
-        <header class="view-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-          <div>
-            <h2 style="font-size:22px;font-weight:800;color:var(--text-main);letter-spacing:-0.02em">Operations Dashboard</h2>
-            <p style="font-size:13px;color:var(--text-muted);margin-top:4px">Analytics on COO and DOO cases logged by the team.</p>
-          </div>
-          <a href="/api/analytics/export" class="btn" style="text-decoration:none" title="Download all logged cases as CSV">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export CSV
-          </a>
-          <button class="btn" id="btn-clear-all-data" style="color:#dc2626;border-color:#fecaca;background:#fef2f2" title="Permanently delete all logged case data">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            Clear All Data
-          </button>
-        </header>
-
-        <!-- Metric Cards -->
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Total Logged Cases</span>
-              <div class="metric-icon total">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              </div>
-            </div>
-            <span class="metric-value" id="metric-total">0</span>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Change of Ownership (COO)</span>
-              <div class="metric-icon coo">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-              </div>
-            </div>
-            <span class="metric-value" id="metric-coo">0</span>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">
-              <span class="metric-label">Declaration of Ownership (DOO)</span>
-              <div class="metric-icon doo">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-              </div>
-            </div>
-            <span class="metric-value" id="metric-doo">0</span>
-          </div>
-        </div>
-
-        <!-- Charts -->
-        <div class="charts-layout">
-          <div class="card chart-card timeline-card">
-            <div class="chart-header">
-              <h3 class="card-title">Case Volume Over Time</h3>
-              <div style="display:flex;align-items:center;gap:8px">
-              <button class="btn-chart-dl" onclick="downloadChart('timeline','case-volume')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-              <div class="timeline-tabs">
-                <button class="timeline-tab active" data-granularity="day">Daily</button>
-                <button class="timeline-tab" data-granularity="week">Weekly</button>
-                <button class="timeline-tab" data-granularity="month">Monthly</button>
-              </div>
-              </div>
-            </div>
-            <div class="chart-container"><canvas id="chart-timeline"></canvas></div>
-          </div>
-          <div class="card chart-card">
-            <div class="chart-header"><h3 class="card-title">Region-Based Analysis</h3><button class="btn-chart-dl" onclick="downloadChart('region','region-analysis')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-            <div class="chart-container donut"><canvas id="chart-region"></canvas></div>
-          </div>
-          <div class="card chart-card">
-            <div class="chart-header"><h3 class="card-title">Case Categories</h3><button class="btn-chart-dl" onclick="downloadChart('category','case-categories')" title="Download chart as PNG"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
-            <div class="chart-container donut"><canvas id="chart-category"></canvas></div>
-          </div>
-          <div class="card table-card">
-            <div class="card-header">
-              <h3 class="card-title">Scenario Breakdowns</h3>
-              <span class="card-subtitle">Volume distribution across specific scenarios</span>
-            </div>
-            <div class="table-container">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Scenario Name</th>
-                    <th>Category</th>
-                    <th class="text-right">Total Cases Logged</th>
-                  </tr>
-                </thead>
-                <tbody id="scenario-stats-table"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
 
     </main>
   </div>

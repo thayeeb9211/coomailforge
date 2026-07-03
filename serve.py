@@ -31,9 +31,8 @@ def find_free_port(ports):
             print(f"  Port {p} is busy — trying next…")
     raise RuntimeError(f"None of the ports {ports} are available. Free one and retry.")
 
-HOST     = "0.0.0.0"
-LAN_IP   = get_lan_ip()
-IS_CLOUD = bool(os.environ.get("FIREBASE_CREDENTIALS")) and "PORT" in os.environ
+HOST   = "0.0.0.0"
+LAN_IP = get_lan_ip()
 
 if __name__ == "__main__":
     try:
@@ -43,31 +42,22 @@ if __name__ == "__main__":
         os.system("pip install waitress")
         from waitress import serve
 
-    from app import app
+    from app import app, start_auto_update
+    start_auto_update()
 
-    if IS_CLOUD:
-        PORT = int(os.environ.get("PORT", 5001))
-        print("=" * 62)
-        print("  COO Mail Forge  —  Cloud Mode (Render)")
-        print("=" * 62)
-        print(f"  Listening on port {PORT}")
-        print("=" * 62)
-    else:
-        PORT = find_free_port(PREFERRED_PORTS)
-        print()
-        print("=" * 62)
-        print("  COO Mail Forge  —  Local / Intranet Mode")
-        print("=" * 62)
-        print(f"  Your PC:   http://localhost:{PORT}")
-        print(f"  Agents:    http://{LAN_IP}:{PORT}")
-        print(f"  Manager:   http://{LAN_IP}:{PORT}/admin")
-        print("=" * 62)
-        print("  Share the AGENTS link with COO staff.")
-        print("  Share the MANAGER link with your supervisor.")
-        print("  Press Ctrl+C to stop the server.")
-        print("=" * 62)
-        print()
-        threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
+    PORT = find_free_port(PREFERRED_PORTS)
+    print()
+    print("=" * 62)
+    print("  COO Mail Forge  —  Local / Intranet Mode")
+    print("=" * 62)
+    print(f"  Your PC:   http://localhost:{PORT}")
+    print(f"  Agents:    http://{LAN_IP}:{PORT}")
+    print("=" * 62)
+    print("  Share the AGENTS link with all COO / DOO staff.")
+    print("  Press Ctrl+C to stop the server.")
+    print("=" * 62)
+    print()
+    threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
 
     try:
         serve(app, host=HOST, port=PORT, threads=16)

@@ -1,24 +1,19 @@
 import os
 import sys
 import json
-import uuid
 import webbrowser
-from datetime import datetime, timezone, timedelta
-import csv, io
-from flask import Flask, request, jsonify, render_template, redirect, url_for, make_response
+import subprocess
+import threading
+import time
+from datetime import datetime, timezone
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 import enphase_client
-import db_layer
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-DB_PATH  = os.path.join(DATA_DIR, "mailforge.db")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-db_layer.init(DB_PATH)
-CLOUD_MODE = db_layer.is_cloud()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 try:
     import enlighten_scraper
-    SCRAPER_AVAILABLE = True and not CLOUD_MODE
+    SCRAPER_AVAILABLE = True
 except ImportError:
     SCRAPER_AVAILABLE = False
 
@@ -265,11 +260,56 @@ def enlighten_clear_session():
     return jsonify({"status": "success"})
 
 
+@app.route('/api/salesforce/check-session')
+def salesforce_check_session():
+    if not SCRAPER_AVAILABLE:
+        return jsonify({"status": "error", "message": "Scraper not available"}), 503
+    return jsonify({"status": "success", "has_session": enlighten_scraper.has_salesforce_session()})
+
+
+@app.route('/api/salesforce/login-status')
+def salesforce_login_status():
+    if not SCRAPER_AVAILABLE:
+        return jsonify({"status": "error", "message": "Scraper not available"}), 503
+    return jsonify(enlighten_scraper.get_salesforce_status())
+
+
+@app.route('/api/salesforce/start-login', methods=['POST'])
+def salesforce_start_login():
+    if not SCRAPER_AVAILABLE:
+        return jsonify({"status": "error", "message": "Scraper not available"}), 503
+    enlighten_scraper.start_salesforce_login()
+    return jsonify({"status": "success"})
+
+
+@app.route('/api/salesforce/clear-session', methods=['POST'])
+def salesforce_clear_session():
+    if SCRAPER_AVAILABLE:
+        enlighten_scraper.clear_salesforce_session()
+    return jsonify({"status": "success"})
+
+
+@app.route('/api/salesforce/fetch-case')
+def salesforce_fetch_case():
+    if not SCRAPER_AVAILABLE:
+        return jsonify({"status": "error", "message": "Scraper not available on this server."}), 503
+    case_number = request.args.get("case_number", "").strip()
+    if not case_number:
+        return jsonify({"status": "error", "message": "case_number is required."}), 400
+    try:
+        data = enlighten_scraper.fetch_salesforce_case(case_number)
+        return jsonify({"status": "success", "data": data})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ── Custom Template Routes ────────────────────────────────────────
 
 @app.route('/api/custom-templates', methods=['GET'])
 def get_custom_templates():
-    return jsonify(db_layer.read_templates())
+    return jsonify(_load_templates())
 
 
 @app.route('/api/custom-templates', methods=['POST'])
@@ -287,7 +327,9 @@ def create_custom_template():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": data.get("created_by", "")
     }
-    db_layer.save_template(new_tpl)
+    templates = _load_templates()
+    templates.append(new_tpl)
+    _save_templates(templates)
     return jsonify({"status": "success", "template": new_tpl})
 
 
@@ -306,189 +348,79 @@ def update_custom_template(template_id):
         "created_at": data.get("created_at", datetime.now(timezone.utc).isoformat()),
         "created_by": data.get("created_by", "")
     }
-    db_layer.save_template(updated)
+    templates = _load_templates()
+    templates = [t if t["id"] != template_id else updated for t in templates]
+    _save_templates(templates)
     return jsonify({"status": "success", "template": updated})
 
 
 @app.route('/api/custom-templates/<template_id>', methods=['DELETE'])
 def delete_custom_template(template_id):
-    db_layer.delete_template(template_id)
+    templates = [t for t in _load_templates() if t["id"] != template_id]
+    _save_templates(templates)
     return jsonify({"status": "success"})
 
-
-# ── Analytics / Cases Routes ─────────────────────────────────────
 
 @app.route('/api/regions')
 def get_regions():
     return jsonify(REGIONS)
 
 
-@app.route('/api/cases', methods=['POST'])
-def log_case():
-    data = request.get_json() or {}
-    scenario = data.get('scenario')
-    if not scenario:
-        return jsonify({'error': 'scenario is required'}), 400
-    region   = data.get('region', 'Other / Unspecified')
-    category = data.get('category', 'Other')
-    if region not in REGIONS:
-        region = 'Other / Unspecified'
-    entry = {
-        'id':       str(uuid.uuid4()),
-        'scenario': scenario,
-        'region':   region,
-        'category': category,
-        'at':       datetime.utcnow().isoformat() + 'Z'
-    }
-    db_layer.insert_case(entry)
-    return jsonify(entry), 201
+# ── Git Auto-Update ───────────────────────────────────────────────
 
+_update_status = {"last_checked": None, "status": "idle", "message": "Not checked yet"}
+_update_lock   = threading.Lock()
+UPDATE_INTERVAL = 3600
 
-@app.route('/api/cases/clear', methods=['POST'])
-def clear_cases():
-    db_layer.clear_cases()
-    return jsonify({'status': 'success', 'message': 'All analytics data cleared.'})
-
-
-def _bucket_key(dt_str, gran):
-    if dt_str.endswith('Z'):
-        dt_str = dt_str[:-1]
+def check_git_updates():
+    global _update_status
+    repo_dir = BASE_DIR
     try:
-        dt = datetime.fromisoformat(dt_str)
-    except Exception:
-        return dt_str[:10]
-    if gran == 'day':   return dt.strftime('%Y-%m-%d')
-    if gran == 'month': return dt.strftime('%Y-%m')
-    year, week, _ = dt.isocalendar()
-    return f"{year}-W{week:02d}"
+        subprocess.run(["git", "fetch"], cwd=repo_dir, capture_output=True, timeout=30)
+        local  = subprocess.run(["git", "rev-parse", "HEAD"],          cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+        remote = subprocess.run(["git", "rev-parse", "@{u}"],          cwd=repo_dir, capture_output=True, text=True).stdout.strip()
+        with _update_lock:
+            _update_status["last_checked"] = datetime.utcnow().isoformat() + "Z"
+        if local != remote:
+            subprocess.run(["git", "pull"], cwd=repo_dir, capture_output=True, timeout=60)
+            with _update_lock:
+                _update_status["status"]  = "updated"
+                _update_status["message"] = "Update applied, restarting…"
+            time.sleep(1)
+            os._exit(0)
+        else:
+            with _update_lock:
+                _update_status["status"]  = "up_to_date"
+                _update_status["message"] = "Already up to date"
+    except Exception as e:
+        with _update_lock:
+            _update_status["status"]  = "error"
+            _update_status["message"] = str(e)
 
+def _auto_update_worker():
+    while True:
+        time.sleep(UPDATE_INTERVAL)
+        check_git_updates()
 
-@app.route('/api/analytics')
-def get_analytics():
-    cases = db_layer.read_cases()
-    by_region   = {r: 0 for r in REGIONS}
-    by_category = {'COO': 0, 'DOO': 0, 'Other': 0}
-    by_scenario = {}
-    for c in cases:
-        cat = c.get('category', 'Other')
-        by_category[cat] = by_category.get(cat, 0) + 1
-        reg = c.get('region', 'Other / Unspecified')
-        by_region[reg]   = by_region.get(reg, 0) + 1
-        scen = c.get('scenario', 'unknown')
-        by_scenario[scen] = by_scenario.get(scen, 0) + 1
-    now = datetime.utcnow()
-    daily   = []
-    for i in range(29, -1, -1):
-        d = now - timedelta(days=i)
-        k = d.strftime('%Y-%m-%d')
-        daily.append({'period': k, 'count': sum(1 for c in cases if _bucket_key(c['at'],'day') == k)})
-    weekly  = []
-    for i in range(11, -1, -1):
-        d = now - timedelta(weeks=i)
-        year, week, _ = d.isocalendar()
-        k = f"{year}-W{week:02d}"
-        weekly.append({'period': k, 'count': sum(1 for c in cases if _bucket_key(c['at'],'week') == k)})
-    monthly = []
-    for i in range(11, -1, -1):
-        year, month = now.year, now.month - i
-        while month <= 0: month += 12; year -= 1
-        k = f"{year}-{month:02d}"
-        monthly.append({'period': k, 'count': sum(1 for c in cases if _bucket_key(c['at'],'month') == k)})
-    return jsonify({
-        'total':      len(cases),
-        'byRegion':   [{'region': k,   'count': v} for k, v in by_region.items()],
-        'byCategory': [{'category': k, 'count': v} for k, v in by_category.items()],
-        'byScenario': [{'scenario': k, 'count': v} for k, v in by_scenario.items()],
-        'daily': daily, 'weekly': weekly, 'monthly': monthly
-    })
+def start_auto_update():
+    t = threading.Thread(target=_auto_update_worker, daemon=True)
+    t.start()
 
+@app.route('/api/update/check', methods=['POST'])
+def api_update_check():
+    threading.Thread(target=check_git_updates, daemon=True).start()
+    time.sleep(0.5)
+    with _update_lock:
+        return jsonify(dict(_update_status))
 
-@app.route('/api/analytics/export')
-def export_analytics_csv():
-    cases = db_layer.read_cases()
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['ID', 'Scenario', 'Category', 'Region', 'Logged At (UTC)'])
-    for c in cases:
-        writer.writerow([
-            c.get('id',''), c.get('scenario',''), c.get('category',''),
-            c.get('region',''), c.get('at','')
-        ])
-    filename = f"mailforge_cases_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
-    resp = make_response(output.getvalue())
-    resp.headers['Content-Type']        = 'text/csv'
-    resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-    return resp
-
-
-@app.route('/admin')
-def admin_dashboard():
-    cases   = db_layer.read_cases()
-    db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
-    custom  = db_layer.read_templates()
-    mode    = "☁️ Firebase Firestore (Cloud)" if CLOUD_MODE else "🗄️ SQLite (Local)"
-    recent  = list(reversed(cases))[:100]
-    rows_html = ""
-    for c in recent:
-        cat_color = {"COO":"#3b82f6","DOO":"#10b981"}.get(c.get("category",""), "#64748b")
-        rows_html += f"""
-        <tr>
-          <td style="font-family:monospace;font-size:11px;color:#94a3b8">{c.get('id','')[:8]}…</td>
-          <td>{c.get('scenario','')}</td>
-          <td><span style="background:{cat_color};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">{c.get('category','')}</span></td>
-          <td>{c.get('region','')}</td>
-          <td style="font-family:monospace;font-size:12px">{c.get('at','')[:19].replace('T',' ')}</td>
-        </tr>"""
-    html = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>COO Mail Forge — Admin DB Viewer</title>
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;color:#1e293b;padding:32px}}
-h1{{font-size:22px;font-weight:800;color:#1e293b;margin-bottom:4px}}
-.sub{{font-size:13px;color:#64748b;margin-bottom:28px}}
-.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px}}
-.card{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px}}
-.card .n{{font-size:32px;font-weight:800;color:#f47920}}
-.card .l{{font-size:12px;color:#64748b;margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}}
-table{{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0}}
-th{{background:#f8fafc;padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:1px solid #e2e8f0}}
-td{{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}}
-tr:last-child td{{border-bottom:none}}
-tr:hover td{{background:#fafbff}}
-.actions{{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center}}
-.btn{{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;border:1px solid #e2e8f0;background:#fff;color:#1e293b}}
-.btn-red{{background:#fef2f2;border-color:#fecaca;color:#dc2626}}
-.btn:hover{{border-color:#f47920;color:#f47920}}
-.dbpath{{font-family:monospace;font-size:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 12px;color:#475569;word-break:break-all}}
-</style></head><body>
-<h1>🗄️ COO Mail Forge — Admin DB Viewer</h1>
-<p class="sub">Live view of <span class="dbpath">{DB_PATH}</span></p>
-<div class="cards">
-  <div class="card"><div class="n">{len(cases)}</div><div class="l">Total Cases</div></div>
-  <div class="card"><div class="n">{sum(1 for c in cases if c.get('category')=='COO')}</div><div class="l">COO Cases</div></div>
-  <div class="card"><div class="n">{sum(1 for c in cases if c.get('category')=='DOO')}</div><div class="l">DOO Cases</div></div>
-  <div class="card"><div class="n">{len(custom)}</div><div class="l">Custom Templates</div></div>
-  <div class="card"><div class="n">{db_size//1024} KB</div><div class="l">DB File Size</div></div>
-</div>
-<div class="actions">
-  <a href="/api/analytics/export" class="btn">⬇ Export All as CSV</a>
-  <a href="/" class="btn">← Back to App</a>
-  <form method="post" action="/api/cases/clear" onsubmit="return confirm('Delete ALL case data? Cannot be undone.');" style="margin:0">
-    <button type="submit" class="btn btn-red">🗑 Clear All Cases</button>
-  </form>
-  <span style="font-size:12px;color:#94a3b8">Showing last {len(recent)} of {len(cases)} records</span>
-</div>
-<table>
-<thead><tr><th>ID</th><th>Scenario</th><th>Category</th><th>Region</th><th>Logged At (UTC)</th></tr></thead>
-<tbody>{rows_html if rows_html else '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:32px">No cases logged yet.</td></tr>'}</tbody>
-</table>
-<p style="margin-top:16px;font-size:12px;color:#94a3b8">Tip: bookmark <strong>http://localhost:5001/admin</strong> for quick access. Refresh the page to see latest data.</p>
-</body></html>"""
-    return html
+@app.route('/api/update/status')
+def api_update_status():
+    with _update_lock:
+        return jsonify(dict(_update_status))
 
 
 if __name__ == '__main__':
+    start_auto_update()
     if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
         webbrowser.open("http://localhost:5001")
     app.run(port=5001, debug=True)

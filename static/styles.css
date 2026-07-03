@@ -137,19 +137,28 @@ body {
    Enlighten Sidebar Card
    ============================================================ */
 .enl-card { border-color: #fed7aa; background: linear-gradient(135deg, #fff7ed 0%, #fff 60%); }
-.enl-session-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 8px; }
 .enl-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--secondary); flex-shrink: 0; }
 .enl-dot.ok { background: var(--success); box-shadow: 0 0 6px rgba(22,163,74,0.5); }
 .enl-dot.wait { background: var(--warn); box-shadow: 0 0 6px rgba(217,119,6,0.4); }
 .enl-dot.no { background: var(--danger); }
-.enl-session-label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+
+/* Session status block — shown at top of scanner card */
+.session-status-block { display: flex; flex-direction: column; gap: 7px; margin: 10px 0 12px; padding: 10px 12px; background: var(--secondary-soft); border: 1px solid var(--border-color); border-radius: 10px; }
+.session-row-combined { display: flex; align-items: center; gap: 8px; }
+.session-label-text { flex: 1; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.btn-session-login { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; cursor: pointer; border: none; background: var(--primary); color: #fff; font-family: var(--font-sans); transition: all .15s; white-space: nowrap; }
+.btn-session-login:hover { background: var(--primary-hover); }
+.btn-session-login.sf { background: #0ea5e9; }
+.btn-session-login.sf:hover { background: #0284c7; }
+.btn-session-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.enl-case-row { display: flex; gap: 6px; margin-top: 8px; }
+.enl-case-row .form-control { flex: 1; font-family: var(--font-mono); font-size: 13px; }
 .enl-site-row { display: flex; gap: 6px; margin-top: 8px; }
 .enl-site-row .form-control { flex: 1; font-family: var(--font-mono); font-size: 13px; }
 .btn-enl-scan { background: var(--primary); color: #fff; border: none; border-radius: var(--radius-md); padding: 0 12px; font-family: var(--font-sans); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background 0.2s; }
 .btn-enl-scan:hover { background: var(--primary-hover); }
 .btn-enl-scan:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-enl-login { width: 100%; margin-top: 6px; background: var(--secondary-soft); color: var(--text-muted); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 8px; font-family: var(--font-sans); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-.btn-enl-login:hover { background: var(--border-color); color: var(--text-main); }
 
 /* ============================================================
    Main Workspace
@@ -182,6 +191,11 @@ body {
 .workspace-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 32px; align-items: start; }
 @media (max-width: 1200px) { .workspace-grid { grid-template-columns: 1fr; } }
 
+/* SOP-only mode: hide form, expand guidelines full-width */
+.workspace-grid.sop-mode .form-card { display: none; }
+.workspace-grid.sop-mode .preview-panel { grid-column: 1 / -1; }
+.workspace-grid.sop-mode .preview-sticky { position: static; }
+
 .card {
   background-color: var(--bg-card); border: 1px solid var(--border-color);
   border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; transition: box-shadow 0.2s ease;
@@ -202,6 +216,7 @@ body {
   border: 1px solid transparent; border-radius: var(--radius-md);
   font-family: var(--font-sans); font-size: 14px; color: var(--text-main); outline: none; transition: all 0.15s ease;
 }
+.form-control::placeholder { color: #b0bec5; font-style: italic; font-weight: 400; }
 .form-control:focus { background-color: var(--bg-input-focus); border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(249,115,22,0.15); }
 textarea.form-control { resize: vertical; min-height: 70px; }
 select.form-control {
@@ -379,6 +394,31 @@ select.form-control {
 .lw-btn:hover { background: var(--primary-hover); }
 .lw-hint { font-size: 11.5px; color: var(--text-light); line-height: 1.5; }
 .lw-skip { background: none; border: none; color: var(--text-light); font-size: 12px; cursor: pointer; font-family: var(--font-sans); text-decoration: underline; margin-top: 12px; display: block; width: 100%; }
+
+/* ============================================================
+   Role Selector Overlay
+   ============================================================ */
+.role-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.72); backdrop-filter: blur(8px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.role-overlay.hidden { display: none; }
+.role-overlay-inner { background: #fff; border-radius: 22px; padding: 40px; max-width: 840px; width: 100%; box-shadow: 0 32px 80px rgba(0,0,0,0.28); }
+.role-overlay-header { text-align: center; margin-bottom: 32px; }
+.role-cards-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.role-card { border: 2px solid var(--border-color); border-radius: 16px; padding: 28px; cursor: pointer; transition: all .2s; background: #fff; text-align: left; }
+.role-card:hover { border-color: var(--primary); box-shadow: 0 8px 32px rgba(249,115,22,.18); transform: translateY(-3px); }
+.role-card-team:hover { border-color: #3B82F6; box-shadow: 0 8px 32px rgba(59,130,246,.18); }
+.role-card-title { font-size: 16px; font-weight: 800; color: var(--text-main); margin: 0 0 10px; letter-spacing: -.02em; font-family: var(--font-sans); }
+.role-card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 16px; font-family: var(--font-sans); }
+.role-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+.role-tag { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.role-tag.team { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.role-select-btn { width: 100%; padding: 11px; background: var(--primary); color: #fff; border: none; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: var(--font-sans); transition: background .15s; }
+.role-select-btn:hover { background: var(--primary-hover); }
+.role-select-btn.team { background: #3B82F6; }
+.role-select-btn.team:hover { background: #2563EB; }
+.role-indicator-btn { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 10px; background: var(--secondary-soft); border: 1px solid var(--border-color); border-radius: 8px; font-size: 11.5px; font-weight: 600; color: var(--text-muted); cursor: pointer; font-family: var(--font-sans); transition: all .15s; }
+.role-indicator-btn:hover { border-color: var(--primary); color: var(--primary); }
+.role-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+.role-dot.team { background: #3B82F6; }
 
 /* ============================================================
    Misc Utilities
