@@ -81,7 +81,7 @@ Enphase Support Team`;
       id: "coo-normal", group: "Change of Ownership (COO)", category: "COO",
       label: "Transfer complete — system normal",
       desc: "Send once the COO is finished and today's health scan shows the system operating normally.",
-      fields: ["customerName","siteId","caseNumber","systemName","ownerName","ownerEmail","ownerAddress","maintainerName","maintainerPhone","installerName","installerPhone"],
+      fields: ["customerName","siteId","caseNumber","systemName","ownerEmail","ownerAddress","maintainerName","maintainerPhone","installerName","installerPhone"],
       emails: [{
         title: "Transfer Confirmation (Normal)", to: "Homeowner", cc: "",
         subject: f => `Enphase Update: Ownership Transfer (Site ID: ${v(f.siteId,"siteId")})`,
@@ -92,7 +92,7 @@ Thank you for contacting Enphase.
 This is regarding Site ID: ${v(f.siteId,"siteId")} with the system name "${v(f.systemName,"systemName")}". Ownership of the system has been successfully transferred to the new owner listed below.
 
 New Owner Details:
-Name: ${v(f.ownerName,"ownerName")}
+Name: ${v(f.customerName,"customerName")}
 Email: ${v(f.ownerEmail,"ownerEmail")}
 Address: ${v(f.ownerAddress,"ownerAddress")}
 
@@ -115,7 +115,7 @@ Enphase Support Team`
       id: "coo-not-normal", group: "Change of Ownership (COO)", category: "COO",
       label: "Transfer complete — system has an issue",
       desc: "Send when ownership has transferred but today's health scan flagged a problem.",
-      fields: ["customerName","siteId","caseNumber","systemName","ownerName","ownerEmail","ownerAddress","issue","maintainerName","maintainerPhone","installerName","installerPhone"],
+      fields: ["customerName","siteId","caseNumber","systemName","ownerEmail","ownerAddress","issue","maintainerName","maintainerPhone","installerName","installerPhone"],
       emails: [{
         title: "Transfer Confirmation (Has Issue)", to: "Homeowner", cc: "",
         subject: f => `Enphase Update: Ownership Transfer (Site ID: ${v(f.siteId,"siteId")})`,
@@ -126,7 +126,7 @@ Thank you for contacting Enphase.
 This is regarding Site ID: ${v(f.siteId,"siteId")}, with the system name "${v(f.systemName,"systemName")}." The ownership has been successfully transferred to the new owner listed below.
 
 New Owner Details:
-Name: ${v(f.ownerName,"ownerName")}
+Name: ${v(f.customerName,"customerName")}
 Email: ${v(f.ownerEmail,"ownerEmail")}
 Address: ${v(f.ownerAddress,"ownerAddress")}
 
@@ -922,7 +922,11 @@ Enphase Support Team`
     const maintPhone = data.maintainer_phone || data.installer_phone || "";
 
     const MAP = {
-      "field-customerName":   data.owner_name || "",
+      "field-siteId":          data.site_id     || "",
+      "field-customerName":    data.owner_name  || "",
+      "field-ownerName":       data.owner_name  || "",
+      "field-ownerEmail":      data.owner_email || "",
+      "field-ownerAddress":    data.address     || "",
       "field-systemName":      data.system_name || "",
       "field-installerName":   instName,
       "field-installerPhone":  instPhone,
@@ -1015,22 +1019,50 @@ Enphase Support Team`
     if (wall) wall.classList.add("hidden");
   }
 
+  function _startupShow(dotClass, text, showLogin) {
+    const spinner   = document.getElementById("startup-spinner");
+    const statusRow = document.getElementById("startup-status-row");
+    const dot       = document.getElementById("startup-status-dot");
+    const label     = document.getElementById("startup-status-text");
+    const loginArea = document.getElementById("startup-login-area");
+    const sub       = document.getElementById("startup-sub");
+    if (spinner)   spinner.style.display   = "none";
+    if (statusRow) statusRow.style.display = "flex";
+    if (dot)       dot.className           = "startup-status-dot " + dotClass;
+    if (label)     label.textContent       = text;
+    if (sub)       sub.textContent         = text;
+    if (loginArea) loginArea.style.display = showLogin ? "block" : "none";
+  }
+
+  function _startupDismiss() {
+    const overlay = document.getElementById("startup-overlay");
+    if (!overlay) return;
+    overlay.classList.add("fade-out");
+    setTimeout(() => overlay.classList.add("hidden"), 420);
+  }
+
   async function checkSessionOnLoad() {
+    // Reactive auto-detect: checks saved session, then steals from open browser
     try {
-      const d = await (await fetch("/api/enlighten/check-session")).json();
-      if (d.status === "active") {
-        setEnlStatus("ok", "Session active");
+      setEnlStatus("wait", "Detecting session…");
+      const d = await (await fetch("/api/enlighten/auto-detect")).json();
+      if (d.status === "active" || d.status === "stolen") {
+        const msg = d.status === "stolen" ? "Session captured from browser" : "Session active";
+        setEnlStatus("ok", msg);
+        _startupShow("ok", "Enlighten session active — loading app…", false);
         dismissLoginWall();
+        setTimeout(_startupDismiss, 1200);
       } else if (d.status === "unavailable") {
         setEnlStatus("no", "Scanner not available");
+        _startupShow("no", "Scanner not available on this server", false);
+        setTimeout(_startupDismiss, 2000);
       } else {
         setEnlStatus("no", "Not logged in");
-        if (!d.has_file) {
-          setTimeout(() => startEnlightenLogin(true), 1000);
-        }
+        _startupShow("no", "Enlighten session not found", true);
       }
     } catch {
       setEnlStatus("no", "Session check failed");
+      _startupShow("no", "Could not reach server", true);
     }
 
     // Check Salesforce session
@@ -1059,8 +1091,12 @@ Enphase Support Team`
     if (!lastScanData) return;
     const d = lastScanData;
     const SCAN_MAP = {
-      siteId:          d.site_id || "",
+      siteId:          d.site_id     || "",
       systemName:      d.system_name || "",
+      customerName:    d.owner_name  || "",
+      ownerName:       d.owner_name  || "",
+      ownerEmail:      d.owner_email || "",
+      ownerAddress:    d.address     || "",
       installerName:   d.installer_name || d.maintainer_name || "",
       installerPhone:  d.installer_phone || d.company_support_phone || d.maintainer_phone || "",
       maintainerName:  d.maintainer_name || d.installer_name || "",
@@ -1099,6 +1135,7 @@ Enphase Support Team`
       return;
     }
     scenario.fields.forEach(key => {
+      if (key === "caseNumber") return; // already rendered as static global-case-number field
       const def = FIELD_DEFS[key] || { label: key, placeholder: `Enter ${key}` };
       const group = document.createElement("div");
       group.className = "form-group";
@@ -1221,7 +1258,15 @@ Enphase Support Team`
         const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${scenario.id}-${idx+1}.txt`; a.click(); URL.revokeObjectURL(a.href);
         showToast("Downloaded","success");
       });
-      card.querySelector(".btn-clear-fields").addEventListener("click", () => { state[scenario.id] = {}; saveState(); selectScenario(scenario.id); showToast("Fields cleared","info"); });
+      card.querySelector(".btn-clear-fields").addEventListener("click", () => {
+        state[scenario.id] = {};
+        lastScanData = null;
+        saveState();
+        const cnEl = document.getElementById("enl-case-number");
+        if (cnEl) { cnEl.value = ""; cnEl.dispatchEvent(new Event("input")); }
+        selectScenario(scenario.id);
+        showToast("Fields cleared","info");
+      });
       const custBtn = card.querySelector(".btn-customize");
       if (custBtn) custBtn.addEventListener("click", () => _customizeScenarioAsTemplate(scenario));
       draftsEl.appendChild(card);

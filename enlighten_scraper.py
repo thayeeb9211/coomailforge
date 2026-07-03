@@ -52,9 +52,97 @@ def get_salesforce_status():
     return {"status": _sf_login_status, "detail": _sf_last_error}
 
 
-def start_login():
-    """Launch Selenium in a background thread so Flask doesn't block."""
+def steal_browser_cookies():
+    """
+    Read Enlighten cookies directly from the running Chrome/Edge browser
+    cookie store — no Selenium, no new browser window, instant.
+    Returns a list of cookie dicts (same shape as Selenium get_cookies())
+    or None if unavailable.
+    """
+    try:
+        import browser_cookie3
+    except ImportError:
+        return None
+
+    DOMAIN = ".enphaseenergy.com"
+    loaders = []
+    try:
+        loaders.append(("edge",   browser_cookie3.edge))
+    except Exception:
+        pass
+    try:
+        loaders.append(("chrome", browser_cookie3.chrome))
+    except Exception:
+        pass
+
+    for name, loader in loaders:
+        try:
+            cj = loader(domain_name=DOMAIN)
+            cookies = [
+                {
+                    "name":   c.name,
+                    "value":  c.value,
+                    "domain": c.domain,
+                    "path":   c.path,
+                    "secure": c.secure,
+                }
+                for c in cj
+                if c.value
+            ]
+            if cookies:
+                print(f"[scraper] ✔ Stole {len(cookies)} Enlighten cookies from {name}")
+                return cookies
+        except Exception as e:
+            print(f"[scraper]   Cookie steal ({name}): {e}")
+
+    return None
+
+
+def auto_detect_session():
+    """
+    Called on page load. Priority order:
+      1. Saved session still valid  → return 'active'
+      2. Steal from open browser   → save + validate → return 'stolen'
+      3. Nothing worked            → return 'inactive'
+    Updates _login_status so the polling endpoint reflects reality.
+    """
     global _login_status, _last_error
+
+    # 1. Saved session still valid
+    if validate_session():
+        _login_status = "success"
+        return "active"
+
+    # 2. Try reading cookies from the running browser
+    cookies = steal_browser_cookies()
+    if cookies:
+        _save_session(cookies)
+        if validate_session():
+            _login_status = "success"
+            return "stolen"
+
+    _login_status = "idle"
+    return "inactive"
+
+
+def start_login():
+    """
+    Try to steal cookies from the open browser first (instant).
+    Only launch Selenium if that fails.
+    """
+    global _login_status, _last_error
+
+    # Fast path — steal from already-running browser
+    cookies = steal_browser_cookies()
+    if cookies:
+        _save_session(cookies)
+        if validate_session():
+            _login_status = "success"
+            _last_error   = ""
+            print("[scraper] ✔ Session activated via browser cookie steal — no Selenium needed.")
+            return
+
+    # Slow path — open a new Selenium browser window
     with _login_lock:
         if _login_status == "waiting":
             return
@@ -76,38 +164,93 @@ def start_salesforce_login():
     t.start()
 
 
+def _find_local_driver(browser="edge"):
+    """Find a locally installed WebDriver without downloading anything.
+    Searches PATH, common install locations, and Selenium Manager cache."""
+    import glob, shutil
+    if browser == "edge":
+        names = ["msedgedriver.exe", "msedgedriver"]
+        search_roots = [
+            os.path.expanduser(r"~\.wdm\drivers\edgedriver"),
+            os.path.expanduser(r"~\.cache\selenium\msedgedriver"),
+            r"C:\Program Files (x86)\Microsoft\Edge\Application",
+            r"C:\Program Files\Microsoft\Edge\Application",
+            os.path.expanduser(r"~\AppData\Local\Microsoft\Edge\Application"),
+        ]
+    else:
+        names = ["chromedriver.exe", "chromedriver"]
+        search_roots = [
+            os.path.expanduser(r"~\.wdm\drivers\chromedriver"),
+            os.path.expanduser(r"~\.cache\selenium\chromedriver"),
+            r"C:\Program Files\Google\Chrome\Application",
+            r"C:\Program Files (x86)\Google\Chrome\Application",
+            os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application"),
+        ]
+
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+
+    for root in search_roots:
+        if not os.path.isdir(root):
+            continue
+        for name in names:
+            for match in glob.glob(os.path.join(root, "**", name), recursive=True):
+                if os.path.isfile(match) and os.path.getsize(match) > 100_000:
+                    return match
+    return None
+
+
 def _open_browser():
-    """Try Edge first (common on corporate Windows), then Chrome. Returns driver."""
+    """Try Edge then Chrome using locally installed drivers only.
+    No internet download needed — works on corporate VPN."""
     from selenium import webdriver
 
-    # Selenium 4.6+ includes Selenium Manager which auto-locates the installed
-    # browser driver without any external download — no webdriver-manager needed.
+    _SUPPRESS_ARGS = [
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--log-level=3",
+        "--silent",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+    ]
 
-    # ── Try Microsoft Edge ────────────────────────────────────────
+    # ── Try Microsoft Edge (local driver) ─────────────────────────
     edge_err = ""
     try:
+        from selenium.webdriver.edge.service import Service as EdgeService
         opts = webdriver.EdgeOptions()
         opts.add_argument("--start-maximized")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-        driver = webdriver.Edge(options=opts)
+        for a in _SUPPRESS_ARGS:
+            opts.add_argument(a)
+        driver_path = _find_local_driver("edge")
+        service = EdgeService(driver_path) if driver_path else None
+        driver = webdriver.Edge(service=service, options=opts) if service else webdriver.Edge(options=opts)
         return driver, "edge"
     except Exception as exc:
         edge_err = str(exc)
 
-    # ── Fall back to Chrome ───────────────────────────────────────
+    # ── Fall back to Chrome (local driver) ────────────────────────
     chrome_err = ""
     try:
+        from selenium.webdriver.chrome.service import Service as ChromeService
         opts = webdriver.ChromeOptions()
         opts.add_argument("--start-maximized")
         opts.add_experimental_option("excludeSwitches", ["enable-automation"])
-        driver = webdriver.Chrome(options=opts)
+        for a in _SUPPRESS_ARGS:
+            opts.add_argument(a)
+        driver_path = _find_local_driver("chrome")
+        service = ChromeService(driver_path) if driver_path else None
+        driver = webdriver.Chrome(service=service, options=opts) if service else webdriver.Chrome(options=opts)
         return driver, "chrome"
     except Exception as exc:
         chrome_err = str(exc)
 
     raise RuntimeError(
         f"Edge failed: {edge_err} | Chrome failed: {chrome_err}. "
-        "Make sure Edge or Chrome is installed. Connect to GlobalProtect VPN if on home network."
+        "Make sure Edge or Chrome is installed and you are on the Enphase VPN."
     )
 
 
@@ -249,7 +392,7 @@ def fetch_site(site_id):
 
     Stage 1 (sequential): main admin page — session check + CSRF token.
     Stage 2 (parallel):   address_details, access_details, access page,
-                          sfdc_details, standing_alarms — all at once.
+                          standing_alarms — all at once.
     Stage 3 (parallel):   installer + maintainer company pages — if IDs found.
 
     A shared httpx.Client reuses the TCP/TLS connection across all requests.
@@ -307,17 +450,6 @@ def fetch_site(site_id):
         csrf_tok  = csrf_el["content"] if csrf_el else ""
         h1        = main_soup.find("h1")
 
-        # Extract owner name from main page
-        owner_name = ""
-        for label in main_soup.find_all("label"):
-            label_text = label.get_text(strip=True).lower()
-            if "owner" in label_text:
-                parent = label.parent
-                if parent:
-                    val_div = parent.find_next_sibling("div")
-                    if val_div:
-                        owner_name = val_div.get_text(strip=True).split("(")[0].strip()
-                        break
 
         ajax_hdrs = {
             "X-Requested-With": "XMLHttpRequest",
@@ -330,7 +462,8 @@ def fetch_site(site_id):
         data = {
             "site_id":               str(site_id),
             "system_name":           h1.get_text(strip=True) if h1 else f"Site {site_id}",
-            "owner_name":            owner_name,
+            "owner_name":            "",
+            "owner_email":           "",
             "address":               "",
             "installer_name":        "",
             "installer_phone":       "",
@@ -357,22 +490,19 @@ def fetch_site(site_id):
 
         # ── Stage 2: all sub-endpoints in parallel ───────────────────────────
         t2 = time.time()
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             f_addr   = pool.submit(_timed_get, "address_details",
                                    f"{base}/address_details", ajax_hdrs)
             f_acc_aj = pool.submit(_timed_get, "access_details",
                                    f"{base}/access_details",  ajax_hdrs)
             f_acc_pg = pool.submit(_timed_get, "access page",
                                    f"{ENLIGHTEN_BASE}/admin/sites/{site_id}/access")
-            f_sfdc   = pool.submit(_timed_get, "sfdc_details",
-                                   f"{base}/sfdc_details",    ajax_hdrs)
             f_alarms = pool.submit(_timed_get, "standing_alarms",
                                    f"{base}/standing_alarms", ajax_hdrs)
 
             addr_html     = f_addr.result()
             acc_ajax_html = f_acc_aj.result()
             acc_page_html = f_acc_pg.result()
-            sfdc_html     = f_sfdc.result()
             alarms_text   = f_alarms.result()
 
         print(f"[scraper]   {'→ Stage 2 total':<22} {time.time()-t2:.1f}s  (parallel)")
@@ -386,9 +516,6 @@ def fetch_site(site_id):
             for k, v in _parse_access_page(acc_page_html).items():
                 if v:
                     data[k] = v
-        if sfdc_html:
-            data.update({k: v for k, v in _parse_sfdc_status(sfdc_html).items()
-                         if v or k == "has_issues"})
         if alarms_text and alarms_text.strip():
             al = _parse_standing_alarms_csv(alarms_text)
             data["alarms"]      = al.get("alarms", [])
@@ -396,19 +523,23 @@ def fetch_site(site_id):
             if al.get("alarm_count", 0) > 0:
                 data["has_issues"] = True
 
-        # ── Stage 3: company pages in parallel ───────────────────────────────
-        inst_cid  = data.get("installer_company_id", "")
-        maint_cid = data.get("maintainer_company_id", "")
+        # ── Stage 3: company pages + owner user page in parallel ─────────────
+        inst_cid     = data.get("installer_company_id", "")
+        maint_cid    = data.get("maintainer_company_id", "")
+        owner_uid    = data.get("owner_user_id", "")
 
-        if inst_cid or maint_cid:
+        if inst_cid or maint_cid or owner_uid:
             t3 = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
                 f_inst  = (pool.submit(_timed_get, "installer company",
                                        f"{ENLIGHTEN_BASE}/admin/companies/{inst_cid}")
                            if inst_cid else None)
                 f_maint = (pool.submit(_timed_get, "maintainer company",
                                        f"{ENLIGHTEN_BASE}/admin/companies/{maint_cid}")
                            if maint_cid else None)
+                f_user  = (pool.submit(_timed_get, "owner user page",
+                                       f"{ENLIGHTEN_BASE}/admin/users/{owner_uid}")
+                           if owner_uid else None)
 
                 if f_inst:
                     cp = _parse_company_page(f_inst.result())
@@ -430,6 +561,12 @@ def fetch_site(site_id):
                         data["maintainer_email"] = cp["company_support_email"]
                     if cp.get("company_website") and not data["company_website"]:
                         data["company_website"] = cp["company_website"]
+                if f_user:
+                    ud = _parse_user_page(f_user.result())
+                    if ud.get("owner_email") and not data["owner_email"]:
+                        data["owner_email"] = ud["owner_email"]
+                    if ud.get("owner_name") and not data["owner_name"]:
+                        data["owner_name"] = ud["owner_name"]
 
             print(f"[scraper]   {'→ Stage 3 total':<22} {time.time()-t3:.1f}s  (parallel)")
 
@@ -499,6 +636,8 @@ def _parse_address_details(html):
 def _parse_access_details(html):
     """
     access_details structure:
+      <div><label>Owner</label>:</div>
+      <div><span><a href="/admin/users/5593878">KORINE BLONDEL</a></span></div>
       <div><label>PV Installer</label>:</div>
       <div><span>ALLAIRE DU TEMPS</span></div>          -- plain text
       OR
@@ -506,6 +645,8 @@ def _parse_access_details(html):
     """
     soup = BeautifulSoup(html, "html.parser")
     out  = {
+        "owner_name":           "",
+        "owner_user_id":        "",
         "installer_name":       "",
         "installer_phone":      "",
         "installer_company_id": "",
@@ -513,19 +654,28 @@ def _parse_access_details(html):
         "maintainer_phone":     "",
     }
 
+    OWNER_KEYS      = {"owner"}
     INSTALLER_KEYS  = {"pv installer", "installer", "installateur",
                        "installationsbetrieb", "empresa instaladora"}
     MAINTAINER_KEYS = {"o&m", "o & m", "maintainer", "maintenance",
                        "mainteneur", "operation & maintenance", "mantenedor"}
 
     for lbl in soup.find_all("label"):
-        key        = lbl.get_text(strip=True).lower()
+        key        = lbl.get_text(strip=True).lower().rstrip(":")
         parent_div = lbl.parent
         if not parent_div:
             continue
         val_div = parent_div.find_next_sibling("div")
         if not val_div:
             continue
+
+        # Extract user ID if value links to /admin/users/
+        user_a = val_div.find("a", href=lambda h: h and "/admin/users/" in h)
+        if user_a and key in OWNER_KEYS:
+            href = user_a.get("href", "")
+            uid  = href.split("/admin/users/")[-1].split("/")[0].split("?")[0]
+            if uid.isdigit():
+                out["owner_user_id"] = uid
 
         # Extract company ID if the value is a link to /admin/companies/
         company_a = val_div.find("a", href=lambda h: h and "/admin/companies/" in h)
@@ -538,13 +688,52 @@ def _parse_access_details(html):
         val_span = val_div.find("span")
         value = (val_span.get_text(strip=True) if val_span
                  else val_div.get_text(strip=True))
+        value = value.split("(")[0].strip()
         if not value or len(value) < 2:
             continue
 
-        if any(k in key for k in INSTALLER_KEYS):
+        if key in OWNER_KEYS:
+            out["owner_name"] = value
+        elif any(k in key for k in INSTALLER_KEYS):
             out["installer_name"] = value
         elif any(k in key for k in MAINTAINER_KEYS):
             out["maintainer_name"] = value
+
+    return out
+
+
+def _parse_user_page(html):
+    """
+    User admin page (/admin/users/{id}) structure:
+      <label>Email</label>
+      <div>korine.blondel@example.com</div>
+      <label>Name</label> / <h1> — full name of the owner
+    Extracts owner_email and owner_name.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    out  = {"owner_email": "", "owner_name": ""}
+
+    for lbl in soup.find_all("label"):
+        key    = lbl.get_text(strip=True).lower().rstrip(":")
+        parent = lbl.parent
+        if not parent:
+            continue
+        val_div = parent.find("div") or lbl.find_next_sibling("div")
+        if not val_div:
+            continue
+        val = val_div.get_text(strip=True)
+        if not val:
+            continue
+        if key in ("email", "e-mail", "email address"):
+            out["owner_email"] = val
+        elif key in ("name", "full name", "user name"):
+            out["owner_name"]  = val
+
+    # Fallback: grab email from any mailto link
+    if not out["owner_email"]:
+        mailto = soup.find("a", href=lambda h: h and h.startswith("mailto:"))
+        if mailto:
+            out["owner_email"] = mailto.get("href", "").replace("mailto:", "").strip()
 
     return out
 

@@ -374,6 +374,50 @@ select.form-control {
 .toast.info { border-left: 4px solid var(--coo-color); }
 
 /* ============================================================
+   Startup Session Check Overlay
+   ============================================================ */
+.startup-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .4s ease;
+}
+.startup-overlay.hidden { display: none; }
+.startup-overlay.fade-out { opacity: 0; pointer-events: none; }
+.startup-card {
+  text-align: center; padding: 52px 48px; max-width: 400px; width: 90%;
+}
+.startup-logo {
+  width: 72px; height: 72px; border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(249,115,22,.35); margin-bottom: 22px;
+}
+.startup-title {
+  font-size: 26px; font-weight: 800; color: #f8fafc;
+  letter-spacing: -.03em; margin: 0 0 8px;
+}
+.startup-sub {
+  font-size: 14px; color: #94a3b8; margin: 0 0 28px; font-weight: 400;
+}
+.startup-spinner { display: flex; justify-content: center; margin-bottom: 24px; }
+.startup-spin-ring {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid rgba(249,115,22,.2);
+  border-top-color: #f97316;
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.startup-status-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; margin-bottom: 4px;
+}
+.startup-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.startup-status-dot.ok  { background: #22c55e; box-shadow: 0 0 8px #22c55e88; }
+.startup-status-dot.no  { background: #ef4444; box-shadow: 0 0 8px #ef444488; }
+.startup-status-text { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+
+/* ============================================================
    Login Wall Overlay
    ============================================================ */
 .login-wall {

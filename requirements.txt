@@ -7,3 +7,4 @@ beautifulsoup4==4.12.3
 lxml==5.2.2
 waitress>=3.0.0
 pillow>=10.0.0
+browser_cookie3>=0.19.1

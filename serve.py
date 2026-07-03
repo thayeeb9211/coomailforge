@@ -60,7 +60,7 @@ if __name__ == "__main__":
     threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
 
     try:
-        serve(app, host=HOST, port=PORT, threads=16)
+        serve(app, host=HOST, port=PORT, threads=64, connection_limit=1000)
     except OSError as e:
         print()
         print(f"  ERROR: Could not bind to port {PORT}: {e}")

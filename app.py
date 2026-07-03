@@ -219,6 +219,18 @@ def enlighten_check_session():
     })
 
 
+@app.route('/api/enlighten/auto-detect')
+def enlighten_auto_detect():
+    """
+    Reactive session probe: checks saved session, then tries to steal
+    cookies from the running Chrome/Edge browser. Called on page load.
+    """
+    if not SCRAPER_AVAILABLE:
+        return jsonify({"status": "unavailable"})
+    result = enlighten_scraper.auto_detect_session()
+    return jsonify({"status": result})
+
+
 @app.route('/api/enlighten/fetch-site')
 def enlighten_fetch_site():
     if not SCRAPER_AVAILABLE:

@@ -13,6 +13,26 @@
 </head>
 <body>
 
+  <!-- Startup Session Check Overlay -->
+  <div id="startup-overlay" class="startup-overlay">
+    <div class="startup-card">
+      <img src="/static/logo.svg" alt="COO Mail Forge" class="startup-logo">
+      <h2 class="startup-title">COO Mail Forge</h2>
+      <p class="startup-sub" id="startup-sub">Checking Enlighten session…</p>
+      <div class="startup-spinner" id="startup-spinner">
+        <div class="startup-spin-ring"></div>
+      </div>
+      <div class="startup-status-row" id="startup-status-row" style="display:none">
+        <span class="startup-status-dot" id="startup-status-dot"></span>
+        <span class="startup-status-text" id="startup-status-text"></span>
+      </div>
+      <div id="startup-login-area" style="display:none;margin-top:20px;text-align:center">
+        <button class="lw-btn" onclick="startEnlightenLogin(false);document.getElementById('startup-overlay').classList.add('hidden')">Login to Enlighten</button>
+        <button class="lw-skip" onclick="document.getElementById('startup-overlay').classList.add('hidden')">Skip — continue without login</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Wall -->
   <div class="login-wall hidden" id="login-wall">
     <div class="lw-card">
